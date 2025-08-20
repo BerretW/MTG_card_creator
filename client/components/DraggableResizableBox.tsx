@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useCallback, MouseEvent } from 'react';
 import { TemplateElement } from '../types';
 
@@ -7,7 +6,8 @@ interface DraggableResizableBoxProps {
     position: TemplateElement;
     onUpdate: (position: TemplateElement) => void;
     isSelected: boolean;
-    onClick: () => void;
+    // --- ZMĚNA ZDE: Upravujeme typ, aby funkce přijímala MouseEvent ---
+    onClick: (event: MouseEvent<HTMLDivElement>) => void;
     children: React.ReactNode;
 }
 
@@ -21,8 +21,12 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
 
     const handleMouseDown = (e: MouseEvent<HTMLDivElement>, currentAction: DragAction) => {
         e.preventDefault();
-        e.stopPropagation();
-        onClick();
+        // Zde e.stopPropagation() necháme, aby se neproklikávalo dál
+        e.stopPropagation(); 
+        
+        // --- ZMĚNA ZDE: Předáváme "e" (event) do rodičovské komponenty ---
+        onClick(e); 
+        
         setAction(currentAction);
         setStartMouse({ x: e.clientX, y: e.clientY });
         setStartPosition(position);
@@ -47,12 +51,10 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
             newPos.height = startPosition.height + dy;
         }
         
-        // Clamp values to prevent going out of bounds
         newPos.x = Math.max(0, Math.min(100 - newPos.width, newPos.x));
         newPos.y = Math.max(0, Math.min(100 - newPos.height, newPos.y));
         newPos.width = Math.max(5, Math.min(100 - newPos.x, newPos.width));
         newPos.height = Math.max(2, Math.min(100 - newPos.y, newPos.height));
-
 
         onUpdate(newPos);
 
@@ -82,7 +84,7 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
         border: isSelected ? '2px solid #facc15' : '1px dashed rgba(255, 255, 255, 0.5)',
         cursor: action === 'move' ? 'grabbing' : 'grab',
         transition: action ? 'none' : 'border-color 0.2s',
-        zIndex: 2, // << PŘIDAT TENTO ŘÁDEK
+        zIndex: 2,
     };
 
     const handleStyle: React.CSSProperties = {

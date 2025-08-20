@@ -1,52 +1,39 @@
 // client/src/services/assetService.ts
-import { ArtAsset, CustomSetSymbol } from '../types';
+import { ArtAsset, CustomSetSymbol, Template } from '../types';
 
-// const API_URL = 'http://localhost:3001/api'; // URL vašeho back-endu
 const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api`;
 
-// Funkce pro získání tokenu (implementace závisí na vaší auth logice)
 const getAuthToken = () => localStorage.getItem('accessToken');
 
+// Pomocná funkce pro zpracování dat šablony ze serveru.
+// Zajišťuje, že ID je vždy string a že JSON pole jsou správně parsována.
+const processTemplateFromServer = (template: any): Template => ({
+    ...template,
+    id: template.id.toString(), // Převedeme ID na string pro konzistenci na frontendu
+    elements: typeof template.elements === 'string' ? JSON.parse(template.elements) : template.elements,
+    fonts: typeof template.fonts === 'string' ? JSON.parse(template.fonts) : template.fonts,
+});
+
+
 export const assetService = {
+    /**
+     * Získá všechny obrázky (art assets) pro přihlášeného uživatele.
+     */
     getArtAssets: async (): Promise<ArtAsset[]> => {
         const token = getAuthToken();
-        const response = await fetch(`${API_URL}/assets`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+        const response = await fetch(`${API_URL}/assets`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
         });
         if (!response.ok) throw new Error('Failed to fetch assets');
         const assets = await response.json();
-        // Server vrací { id, url }, my potřebujeme { id, dataUrl } pro kompatibilitu
         return assets.map((asset: any) => ({ id: asset.id, dataUrl: asset.url }));
     },
 
-
-        getTemplates: async (): Promise<Template[]> => {
-        const token = getAuthToken();
-        const response = await fetch(`${API_URL}/templates`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error('Failed to fetch templates');
-        return await response.json();
-    },
-
-    updateTemplate: async (template: Template): Promise<void> => {
-        const token = getAuthToken();
-        const response = await fetch(`${API_URL}/templates/${template.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(template),
-        });
-        if (!response.ok) throw new Error('Failed to update template');
-    },
-
-    
+    /**
+     * Nahraje nový obrázek na server a přidá ho do knihovny.
+     */
     addArtAsset: async (dataUrl: string): Promise<ArtAsset> => {
         const token = getAuthToken();
-        
-        // Převod dataUrl na Blob, který můžeme poslat jako soubor
         const response = await fetch(dataUrl);
         const blob = await response.blob();
         const formData = new FormData();
@@ -63,20 +50,70 @@ export const assetService = {
         return { id: newAsset.id, dataUrl: newAsset.url };
     },
     
-    // Ukládání vlastních symbolů zůstává v localStorage pro jednoduchost,
-    // ale mohlo by být také přeneseno na server.
+    /**
+     * Získá všechny šablony pro přihlášeného uživatele.
+     */
+    getTemplates: async (): Promise<Template[]> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        if (!response.ok) throw new Error('Failed to fetch templates');
+        const templatesFromServer = await response.json();
+        return templatesFromServer.map(processTemplateFromServer);
+    },
+
+    /**
+     * Vytvoří novou šablonu na serveru.
+     * @param templateData Data šablony bez ID.
+     * @returns Nově vytvořená šablona s ID od serveru.
+     */
+    createTemplate: async (templateData: Omit<Template, 'id'>): Promise<Template> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(templateData),
+        });
+        if (!response.ok) throw new Error('Failed to create template');
+        const newTemplate = await response.json();
+        return processTemplateFromServer(newTemplate);
+    },
+
+    /**
+     * Aktualizuje existující šablonu na serveru.
+     * @param template Kompletní data šablony včetně ID.
+     * @returns Aktualizovaná data šablony ze serveru.
+     */
+    updateTemplate: async (template: Template): Promise<Template> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates/${template.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(template),
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Failed to update template' }));
+            throw new Error(errorData.message);
+        }
+        const updatedTemplate = await response.json();
+        return processTemplateFromServer(updatedTemplate);
+    },
+    
+    /**
+     * Získá vlastní symboly sad (aktuálně z localStorage).
+     */
     getCustomSetSymbols: async (): Promise<CustomSetSymbol[]> => {
         const stored = localStorage.getItem('customSetSymbols');
         return stored ? JSON.parse(stored) : [];
     },
 
+    /**
+     * Přidá nový vlastní symbol sady (aktuálně do localStorage).
+     */
     addCustomSetSymbol: async (name: string, url: string): Promise<CustomSetSymbol> => {
         const currentSymbols = await assetService.getCustomSetSymbols();
-        const newSymbol: CustomSetSymbol = {
-            id: `custom-${Date.now()}`,
-            name,
-            url
-        };
+        const newSymbol: CustomSetSymbol = { id: `custom-${Date.now()}`, name, url };
         const updatedSymbols = [...currentSymbols, newSymbol];
         localStorage.setItem('customSetSymbols', JSON.stringify(updatedSymbols));
         return newSymbol;

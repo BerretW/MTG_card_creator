@@ -10,16 +10,17 @@ interface CardPreviewProps {
 
 const parseTextWithSymbols = (text: string) => {
     if (!text) return null;
-    // Regulární výraz, který najde text ve složených závorkách, např. {T} nebo {2}
     const parts = text.split(/(\{[^}]+\})/g);
     return parts.map((part, index) => {
         if (part.startsWith('{') && part.endsWith('}')) {
             const symbol = part.replace(/[{}]/g, '');
-            return <ManaSymbol key={index} symbol={symbol} className="h-4 w-4 inline-block align-text-bottom mx-px" />;
+            // --- DŮLEŽITÉ: Používáme klíč (key) pro správné vykreslování v Reactu ---
+            return <ManaSymbol key={`${symbol}-${index}`} symbol={symbol} className="h-4 w-4 inline-block align-text-bottom mx-px" />;
         }
-        return <span key={index}>{part}</span>;
+        return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
     });
 };
+
 
 const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
     if (!template) {
@@ -45,7 +46,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         height: `${elements[el].height}%`,
         display: 'flex',
         alignItems: 'center',
-        zIndex, // Přidáváme z-index pro správné vrstvení
+        zIndex,
     });
 
     const getFontStyle = (font: keyof Template['fonts']): React.CSSProperties => ({
@@ -64,12 +65,10 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         <div 
             className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black"
         >
-            {/* Vrstva 0: Art (úplně vespod) */}
             <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
                 <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
             </div>
 
-            {/* Vrstva 1: Rámeček karty (nad artem) - musí být PNG s průhledností */}
             <img 
                 src={frameImageUrl} 
                 alt="Card Frame" 
@@ -77,7 +76,6 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 style={{ zIndex: 1 }}
             />
 
-            {/* Vrstva 2: Všechny textové a UI elementy (úplně nahoře) */}
             <div style={getElementStyle('title')}>
                 <p style={getFontStyle('title')}>{name}</p>
             </div>
@@ -94,13 +92,20 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
             </div>
 
+            {/* --- OPRAVA: Místo mapování na <p> použijeme jeden hlavní <div> --- */}
             <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: '5px' }}>
                 <div style={getFontStyle('rulesText')}>
-                    {rulesText.split('\n').map((line, i) => <p key={i}>{parseTextWithSymbols(line)}</p>)}
+                    {rulesText.split('\n').map((line, i) => (
+                        // Každý řádek je nyní samostatný <div>, což je validní
+                        <div key={i}>{parseTextWithSymbols(line)}</div>
+                    ))}
                 </div>
                  {flavorText && (
                     <div style={{...getFontStyle('flavorText'), paddingTop: '8px' }}>
-                       {flavorText.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+                       {flavorText.split('\n').map((line, i) => (
+                           // Každý řádek je nyní samostatný <div>
+                           <div key={i}>{line}</div>
+                        ))}
                     </div>
                 )}
             </div>
