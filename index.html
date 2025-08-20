@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MTG Card Creator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Beleren&family=IM+Fell+English+SC&family=M+PLUS+Rounded+1c&display=swap" rel="stylesheet">
+    <style>
+      /* Custom font definitions to be used by Tailwind */
+      @font-face {
+        font-family: 'Beleren';
+        src: url('https://mana.cardtrader.com/css/fonts/beleren-bold.woff2') format('woff2');
+        font-weight: bold;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'MPlantin';
+        src: url('https://mana.cardtrader.com/css/fonts/mplantin.woff2') format('woff2');
+        font-weight: normal;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'MPlantin';
+        src: url('https://mana.cardtrader.com/css/fonts/mplantin-italic.woff2') format('woff2');
+        font-weight: normal;
+        font-style: italic;
+      }
+      body {
+        background-color: #1a202c; /* Equivalent to bg-gray-800 */
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              'beleren': ['Beleren', 'sans-serif'],
+              'mplantin': ['MPlantin', 'serif'],
+              'title': ['IM Fell English SC', 'serif'],
+            },
+            boxShadow: {
+              'inner-dark': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.5)',
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "html-to-image": "https://esm.sh/html-to-image@^1.11.13"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "MTG Card Creator",
+  "description": "A user-friendly web application for designing and creating custom Magic: The Gathering cards. Features include template selection, art generation with AI, and exporting for print or digital use.",
+  "requestFramePermissions": []
+}
