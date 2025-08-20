@@ -1,15 +1,12 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
 
-// Vytvoříme cestu k podsložce 'database' uvnitř složky 'server'
 const dbFolder = path.join(__dirname, 'database');
-
-// Pokud složka neexistuje, vytvoříme ji
-if (!require('fs').existsSync(dbFolder)) {
-    require('fs').mkdirSync(dbFolder);
+if (!fs.existsSync(dbFolder)) {
+    fs.mkdirSync(dbFolder);
 }
 
-// Definujeme plnou cestu k souboru s databází
 const DB_SOURCE = path.join(dbFolder, "db.sqlite");
 
 const db = new sqlite3.Database(DB_SOURCE, (err) => {
@@ -19,14 +16,12 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
     } else {
         console.log('Připojeno k SQLite databázi.');
         
-        // Tabulka pro uživatele
         db.run(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT
         )`);
         
-        // Tabulka pro nahrané obrázky
         db.run(`CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -35,7 +30,6 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             FOREIGN KEY (user_id) REFERENCES users (id)
         )`);
 
-        // Tabulka pro šablony karet
         db.run(`CREATE TABLE IF NOT EXISTS templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -44,6 +38,26 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             elements TEXT,
             fonts TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id)
+        )`);
+
+        // --- NOVÁ TABULKA PRO BALÍČKY ---
+        db.run(`CREATE TABLE IF NOT EXISTS decks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )`);
+
+        // --- NOVÁ TABULKA PRO KARTY V BALÍČCÍCH ---
+        db.run(`CREATE TABLE IF NOT EXISTS deck_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            deck_id INTEGER NOT NULL,
+            card_data TEXT NOT NULL, -- Uložíme celá data karty jako JSON
+            template_data TEXT NOT NULL, -- Uložíme i šablonu použitou pro kartu
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
         )`);
     }
 });

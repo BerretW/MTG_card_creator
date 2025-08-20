@@ -223,6 +223,84 @@ app.delete('/api/templates/:id', authenticateToken, (req, res) => {
 });
 
 
+// GET VŠECHNY BALÍČKY UŽIVATELE
+app.get('/api/decks', authenticateToken, (req, res) => {
+    const sql = "SELECT * FROM decks WHERE user_id = ? ORDER BY created_at DESC";
+    db.all(sql, [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Chyba při načítání balíčků." });
+        res.json(rows);
+    });
+});
+
+// VYTVOŘENÍ NOVÉHO BALÍČKU
+app.post('/api/decks', authenticateToken, (req, res) => {
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ message: "Název balíčku je povinný." });
+
+    const sql = "INSERT INTO decks (user_id, name, description) VALUES (?, ?, ?)";
+    db.run(sql, [req.user.id, name, description || ''], function(err) {
+        if (err) return res.status(500).json({ message: "Chyba při vytváření balíčku." });
+        res.status(201).json({ id: this.lastID, user_id: req.user.id, name, description });
+    });
+});
+
+// ZÍSKÁNÍ JEDNOHO BALÍČKU VČETNĚ KARET
+app.get('/api/decks/:id', authenticateToken, (req, res) => {
+    const deckSql = "SELECT * FROM decks WHERE id = ? AND user_id = ?";
+    db.get(deckSql, [req.params.id, req.user.id], (err, deck) => {
+        if (err) return res.status(500).json({ message: "Chyba databáze." });
+        if (!deck) return res.status(404).json({ message: "Balíček nenalezen." });
+
+        const cardsSql = "SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY added_at ASC";
+        db.all(cardsSql, [req.params.id], (err, cards) => {
+            if (err) return res.status(500).json({ message: "Chyba při načítání karet." });
+            
+            // Parsování JSON dat pro každou kartu
+            const processedCards = cards.map(c => ({
+                ...c,
+                card_data: JSON.parse(c.card_data),
+                template_data: JSON.parse(c.template_data)
+            }));
+
+            res.json({ ...deck, cards: processedCards });
+        });
+    });
+});
+
+// SMAZÁNÍ BALÍČKU
+app.delete('/api/decks/:id', authenticateToken, (req, res) => {
+    // Díky ON DELETE CASCADE v databázi se smažou i všechny karty v balíčku
+    const sql = "DELETE FROM decks WHERE id = ? AND user_id = ?";
+    db.run(sql, [req.params.id, req.user.id], function(err) {
+        if (err) return res.status(500).json({ message: "Chyba při mazání balíčku." });
+        if (this.changes === 0) return res.status(404).json({ message: "Balíček nenalezen." });
+        res.status(200).json({ message: "Balíček úspěšně smazán." });
+    });
+});
+
+// PŘIDÁNÍ KARTY DO BALÍČKU
+app.post('/api/decks/:id/cards', authenticateToken, (req, res) => {
+    const { card_data, template_data } = req.body;
+    if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
+
+    const sql = "INSERT INTO deck_cards (deck_id, card_data, template_data) VALUES (?, ?, ?)";
+    db.run(sql, [req.params.id, JSON.stringify(card_data), JSON.stringify(template_data)], function(err) {
+        if (err) return res.status(500).json({ message: "Chyba při ukládání karty do balíčku." });
+        res.status(201).json({ id: this.lastID, deck_id: req.params.id });
+    });
+});
+
+// ODSTRANĚNÍ KARTY Z BALÍČKU
+app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
+    const sql = "DELETE FROM deck_cards WHERE id = ? AND deck_id = ?";
+    db.run(sql, [req.params.cardId, req.params.deckId], function(err) {
+        if (err) return res.status(500).json({ message: "Chyba při mazání karty." });
+        if (this.changes === 0) return res.status(404).json({ message: "Karta v balíčku nenalezena." });
+        res.status(200).json({ message: "Karta úspěšně smazána." });
+    });
+});
+
+
 // --- Spuštění serveru ---
 app.listen(PORT, () => {
     console.log(`Server běží na portu ${PORT}`);

@@ -1,6 +1,6 @@
 // client/src/services/assetService.ts
-import { ArtAsset, CustomSetSymbol, Template } from '../types';
 
+import { ArtAsset, CustomSetSymbol, Template, Deck, SavedCard, CardData } from '../types';
 const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api`;
 
 const getAuthToken = () => localStorage.getItem('accessToken');
@@ -118,4 +118,57 @@ export const assetService = {
         localStorage.setItem('customSetSymbols', JSON.stringify(updatedSymbols));
         return newSymbol;
     },
+
+     getDecks: async (): Promise<Deck[]> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Nepodařilo se načíst balíčky.');
+        return response.json();
+    },
+
+    getDeckById: async (deckId: number): Promise<Deck> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks/${deckId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Nepodařilo se načíst balíček.');
+        return response.json();
+    },
+
+    createDeck: async (name: string, description: string): Promise<Deck> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ name, description }),
+        });
+        if (!response.ok) throw new Error('Nepodařilo se vytvořit balíček.');
+        return response.json();
+    },
+
+    deleteDeck: async (deckId: number): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks/${deckId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Nepodařilo se smazat balíček.');
+    },
+
+    addCardToDeck: async (deckId: number, card_data: CardData, template_data: Template): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks/${deckId}/cards`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ card_data, template_data }),
+        });
+        if (!response.ok) throw new Error('Nepodařilo se přidat kartu do balíčku.');
+    },
+
+    removeCardFromDeck: async (deckId: number, cardId: number): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks/${deckId}/cards/${cardId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Nepodařilo se odebrat kartu z balíčku.');
+    }
 };

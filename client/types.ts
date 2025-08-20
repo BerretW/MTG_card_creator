@@ -93,3 +93,20 @@ export interface CustomSetSymbol {
     name: string;
     url: string;
 }
+
+
+export interface SavedCard {
+    id: number;
+    deck_id: number;
+    card_data: CardData;
+    template_data: Template;
+}
+
+export interface Deck {
+    id: number;
+    user_id: number;
+    name: string;
+    description: string;
+    created_at: string;
+    cards?: SavedCard[]; // Karty jsou načítány volitelně
+}
