@@ -165,7 +165,7 @@ export const DEFAULT_CARD_DATA: CardData = {
   cardType: CardType.Creature,
   subtype: "Human Artificer",
   rulesText:
-    "When AI Artificer enters the battlefield, you may create a 1/1 colorless Thopter artifact creature token with flying.\n{T}: Add {C}.",
+    "When AI Artificer enters the battlefield, you may create a 1/1 colorless Thopter artifact creature token with flying.\nTap: Add {C}.",
   flavorText:
     '"My creations are not merely tools; they are extensions of my will, given form by logic and light."',
   power: "2",
