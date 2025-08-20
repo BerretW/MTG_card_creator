@@ -23,6 +23,16 @@ IF NOT EXIST "client/node_modules" (
     cd ..
 )
 
+REM Zkontrolujeme, zda existuje .env.local v klientu a pripadne ho vytvorime
+IF NOT EXIST "client/.env.local" (
+    echo.
+    echo Vytvarim vychozi soubor .env.local ve slozce 'client'...
+    echo GEMINI_API_KEY=ZDE_VLOZTE_SVUJ_GEMINI_API_KLIC > "client/.env.local"
+    echo UPOZORNENI: Soubor .env.local byl vytvoren. Pro spravnou funkci AI nastroju do nej prosim vlozte svuj platny Gemini API klic.
+    echo.
+)
+
+
 echo Spoustim back-end server v novem okne...
 REM Otevre nove okno, pojmenuje ho "Backend" a spusti server
 start "Backend Server" cmd /k "cd server && npm start"
