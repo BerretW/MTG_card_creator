@@ -17,6 +17,8 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [viewingCard, setViewingCard] = useState<SavedCard | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState('');
+
 
     const fetchDecks = useCallback(() => {
         setIsLoading(true);
@@ -75,6 +77,8 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     const handleExportDeckToPdf = async () => {
         if (!selectedDeck?.cards || selectedDeck.cards.length === 0) return;
         setIsExporting(true);
+        setExportProgress("Inicializace...");
+
 
         const pdf = new jsPDF('p', 'mm', 'a4');
         const CARDS_PER_PAGE = 9;
@@ -94,6 +98,7 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
         try {
             for (let i = 0; i < cardChunks.length; i++) {
                 const chunk = cardChunks[i];
+                setExportProgress(`Zpracovávám stránku ${i + 1}/${cardChunks.length}...`);
                 
                 // Vytvoříme grid pro aktuální stránku
                 const pageGrid = document.createElement('div');
@@ -121,10 +126,14 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                     );
                 });
 
-                // Dáme malou pauzu, aby se obrázky stihly načíst
+                // Dáme malou pauzu, aby se obrázky a fonty stihly načíst a vykreslit
                 await new Promise(r => setTimeout(r, 1000)); 
 
-                const dataUrl = await toPng(pageGrid, { pixelRatio: 2 });
+                // *** OPRAVA ZDE: Přidán parametr cacheBust: true ***
+                const dataUrl = await toPng(pageGrid, { 
+                    pixelRatio: 2,
+                    cacheBust: true, // Tento řádek řeší problémy s CORS u obrázků
+                });
                 
                 if (i > 0) {
                     pdf.addPage();
@@ -138,16 +147,18 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                 root.unmount();
                 printContainer.removeChild(pageGrid);
             }
-
+            
+            setExportProgress("Ukládání PDF...");
             pdf.save(`${selectedDeck.name.replace(/\s+/g, '_')}.pdf`);
 
         } catch (error) {
             console.error("Chyba při generování PDF:", error);
-            alert("Během exportu do PDF došlo k chybě.");
+            alert("Během exportu do PDF došlo k chybě. Zkuste to prosím znovu.");
         } finally {
             // Finální úklid
             document.body.removeChild(printContainer);
             setIsExporting(false);
+            setExportProgress("");
         }
     };
 
@@ -186,7 +197,7 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                                                 disabled={isExporting}
                                                 className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base disabled:bg-gray-500 disabled:cursor-wait"
                                             >
-                                                {isExporting ? 'Generuji PDF...' : 'Exportovat balíček do PDF'}
+                                                {isExporting ? exportProgress : 'Exportovat balíček do PDF'}
                                             </button>
                                         )}
                                     </div>

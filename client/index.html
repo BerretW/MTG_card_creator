@@ -7,29 +7,32 @@
     <title>MTG Card Creator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- ODSTRANILI JSME PŮVODNÍ ODKAZ NA GOOGLE FONTS -->
-
     <style>
-      /* --- UPRAVENÁ SEKCE S FONT-FACE --- */
-      /* Nyní se fonty načítají z lokální složky /fonts/ */
-      /* Vite automaticky zpřístupní obsah složky 'public' v kořenovém adresáři serveru */
+      /* --- VŠECHNY FONTY SE NYNÍ NAČÍTAJÍ LOKÁLNĚ --- */
       @font-face {
         font-family: 'Beleren';
-        src: url('/fonts/Beleren2016-Bold.ttf') format('ttf');
+        src: url('/fonts/Beleren2016-Bold.ttf') format('truetype');
         font-weight: bold;
         font-style: normal;
       }
       @font-face {
         font-family: 'MPlantin';
-        src: url('/fonts/MPlantin.ttf') format('ttf');
+        src: url('/fonts/MPlantin.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
       }
       @font-face {
         font-family: 'MPlantin';
-        src: url('/fonts/MPlantin-Italic.ttf') format('ttf');
+        src: url('/fonts/MPlantin-Italic.ttf') format('truetype');
         font-weight: normal;
         font-style: italic;
+      }
+      /* --- PŘIDANÝ LOKÁLNÍ FONT --- */
+      @font-face {
+        font-family: 'IM Fell English SC';
+        src: url('/fonts/IMFellEnglishSC-Regular.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
       }
       body {
         background-color: #1a202c;
@@ -43,7 +46,7 @@
             fontFamily: {
               'beleren': ['Beleren', 'sans-serif'],
               'mplantin': ['MPlantin', 'serif'],
-              'title': ['IM Fell English SC', 'serif'], // Tento font je stále z Google Fonts, ale načteme ho jinak
+              'title': ['IM Fell English SC', 'serif'],
             },
             boxShadow: {
               'inner-dark': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.5)',
@@ -63,8 +66,7 @@
   }
 }
 </script>
-<!-- PŘIDALI JSME NOVÝ ODKAZ PRO SPRÁVNÉ NAČTENÍ GOOGLE FONTŮ -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&display=swap">
+<!-- ODKAZ NA GOOGLE FONTS BYL ODSTRANĚN -->
 <link rel="stylesheet" href="/index.css">
 </head>
   <body>
