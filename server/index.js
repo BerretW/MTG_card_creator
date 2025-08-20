@@ -30,7 +30,7 @@ const DEFAULT_TEMPLATES = [
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --- Multer pro nahrávání souborů ---
@@ -57,6 +57,24 @@ const authenticateToken = (req, res, next) => {
         req.user = user;
         next();
     });
+};
+
+// --- Pomocná funkce pro parsování šablony z databáze ---
+const parseTemplateFromDB = (row) => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        name: row.name,
+        frameImageUrl: row.frame_image_url,
+        elements: JSON.parse(row.elements || '{}'),
+        fonts: JSON.parse(row.fonts || '{}'),
+        saturation: row.saturation,
+        hue: row.hue,
+        gradientAngle: row.gradient_angle,
+        gradientOpacity: row.gradient_opacity,
+        gradientStartColor: row.gradient_start_color,
+        gradientEndColor: row.gradient_end_color
+    };
 };
 
 // --- API Routes ---
@@ -122,7 +140,7 @@ app.post('/api/assets', authenticateToken, upload.single('art'), (req, res) => {
 
 // TEMPLATES (CRUD)
 
-// GET all templates for a user
+// --- ZMĚNA ZDE: Používáme pomocnou funkci pro správné parsování ---
 app.get('/api/templates', authenticateToken, (req, res) => {
     db.all('SELECT * FROM templates WHERE user_id = ?', [req.user.id], (err, rows) => {
         if (err) {
@@ -130,13 +148,7 @@ app.get('/api/templates', authenticateToken, (req, res) => {
             return res.status(500).json({ message: "Chyba při načítání šablon." });
         }
         try {
-            const templates = rows.map(row => ({
-                id: row.id,
-                name: row.name,
-                frameImageUrl: row.frame_image_url,
-                elements: JSON.parse(row.elements || '{}'),
-                fonts: JSON.parse(row.fonts || '{}')
-            }));
+            const templates = rows.map(parseTemplateFromDB);
             res.json(templates);
         } catch (parseError) {
             console.error("Error parsing template data from DB:", parseError);
@@ -145,40 +157,59 @@ app.get('/api/templates', authenticateToken, (req, res) => {
     });
 });
 
-// CREATE a new template
+// --- ZMĚNA ZDE: Ukládáme všechny nové vlastnosti ---
 app.post('/api/templates', authenticateToken, (req, res) => {
-    const { name, frameImageUrl, elements, fonts } = req.body;
-    const sql = `INSERT INTO templates (user_id, name, frame_image_url, elements, fonts) VALUES (?, ?, ?, ?, ?)`;
-    const params = [req.user.id, name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts)];
+    const { 
+        name, frameImageUrl, elements, fonts,
+        saturation, hue, gradientAngle, gradientOpacity,
+        gradientStartColor, gradientEndColor
+    } = req.body;
+    
+    const sql = `INSERT INTO templates (
+        user_id, name, frame_image_url, elements, fonts,
+        saturation, hue, gradient_angle, gradient_opacity,
+        gradient_start_color, gradient_end_color
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    
+    const params = [
+        req.user.id, name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
+        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor
+    ];
 
     db.run(sql, params, function (err) {
         if (err) {
             console.error("Database error creating template:", err);
             return res.status(500).json({ message: "Chyba při vytváření šablony." });
         }
-        // Načteme nově vytvořenou šablonu a pošleme ji zpět
         db.get("SELECT * FROM templates WHERE id = ?", [this.lastID], (err, row) => {
              if (err || !row) {
                 return res.status(500).json({ message: "Chyba při načítání nově vytvořené šablony." });
             }
-            const newTemplate = {
-                id: row.id,
-                name: row.name,
-                frameImageUrl: row.frame_image_url,
-                elements: JSON.parse(row.elements || '{}'),
-                fonts: JSON.parse(row.fonts || '{}')
-            };
-            res.status(201).json(newTemplate);
+            res.status(201).json(parseTemplateFromDB(row));
         });
     });
 });
 
-// UPDATE an existing template
+// --- ZMĚNA ZDE: Aktualizujeme všechny nové vlastnosti ---
 app.put('/api/templates/:id', authenticateToken, (req, res) => {
-    const { name, frameImageUrl, elements, fonts } = req.body;
+    const { 
+        name, frameImageUrl, elements, fonts,
+        saturation, hue, gradientAngle, gradientOpacity,
+        gradientStartColor, gradientEndColor
+    } = req.body;
     const { id } = req.params;
-    const sql = `UPDATE templates SET name = ?, frame_image_url = ?, elements = ?, fonts = ? WHERE id = ? AND user_id = ?`;
-    const params = [name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts), id, req.user.id];
+
+    const sql = `UPDATE templates SET 
+        name = ?, frame_image_url = ?, elements = ?, fonts = ?,
+        saturation = ?, hue = ?, gradient_angle = ?, gradient_opacity = ?,
+        gradient_start_color = ?, gradient_end_color = ?
+        WHERE id = ? AND user_id = ?`;
+        
+    const params = [
+        name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
+        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor,
+        id, req.user.id
+    ];
 
     db.run(sql, params, function (err) {
         if (err) {
@@ -188,22 +219,16 @@ app.put('/api/templates/:id', authenticateToken, (req, res) => {
         if (this.changes === 0) {
             return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
         }
-        // Načteme aktualizovanou šablonu a pošleme ji zpět
          db.get("SELECT * FROM templates WHERE id = ?", [id], (err, row) => {
              if (err || !row) {
                 return res.status(500).json({ message: "Chyba při načítání aktualizované šablony." });
             }
-            const updatedTemplate = {
-                id: row.id,
-                name: row.name,
-                frameImageUrl: row.frame_image_url,
-                elements: JSON.parse(row.elements || '{}'),
-                fonts: JSON.parse(row.fonts || '{}')
-            };
-            res.status(200).json(updatedTemplate);
+            res.status(200).json(parseTemplateFromDB(row));
         });
     });
 });
+
+// Zbytek souboru zůstává stejný...
 
 // DELETE a template
 app.delete('/api/templates/:id', authenticateToken, (req, res) => {
@@ -255,7 +280,6 @@ app.get('/api/decks/:id', authenticateToken, (req, res) => {
         db.all(cardsSql, [req.params.id], (err, cards) => {
             if (err) return res.status(500).json({ message: "Chyba při načítání karet." });
             
-            // Parsování JSON dat pro každou kartu
             const processedCards = cards.map(c => ({
                 ...c,
                 card_data: JSON.parse(c.card_data),
@@ -269,7 +293,6 @@ app.get('/api/decks/:id', authenticateToken, (req, res) => {
 
 // SMAZÁNÍ BALÍČKU
 app.delete('/api/decks/:id', authenticateToken, (req, res) => {
-    // Díky ON DELETE CASCADE v databázi se smažou i všechny karty v balíčku
     const sql = "DELETE FROM decks WHERE id = ? AND user_id = ?";
     db.run(sql, [req.params.id, req.user.id], function(err) {
         if (err) return res.status(500).json({ message: "Chyba při mazání balíčku." });
@@ -300,20 +323,17 @@ app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => 
     });
 });
 
-
-// --- NOVÁ CESTA: AKTUALIZACE KONKRÉTNÍ KARTY V BALÍČKU ---
+// AKTUALIZACE KONKRÉTNÍ KARTY V BALÍČKU
 app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
     const { card_data, template_data } = req.body;
     if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
 
-    // Prvně ověříme, že balíček patří přihlášenému uživateli
     db.get("SELECT user_id FROM decks WHERE id = ?", [req.params.deckId], (err, deck) => {
         if (err) return res.status(500).json({ message: "Chyba databáze při ověřování balíčku." });
         if (!deck || deck.user_id !== req.user.id) {
             return res.status(403).json({ message: "Nemáte oprávnění k tomuto balíčku." });
         }
 
-        // Pokud je oprávnění v pořádku, aktualizujeme kartu
         const sql = "UPDATE deck_cards SET card_data = ?, template_data = ? WHERE id = ? AND deck_id = ?";
         const params = [
             JSON.stringify(card_data),
@@ -330,8 +350,6 @@ app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
     });
 });
 
-
-// --- Spuštění serveru ---
 app.listen(PORT, () => {
     console.log(`Server běží na portu ${PORT}`);
 });

@@ -14,11 +14,33 @@ const parseTextWithSymbols = (text: string) => {
     return parts.map((part, index) => {
         if (part.startsWith('{') && part.endsWith('}')) {
             const symbol = part.replace(/[{}]/g, '');
-            // --- DŮLEŽITÉ: Používáme klíč (key) pro správné vykreslování v Reactu ---
             return <ManaSymbol key={`${symbol}-${index}`} symbol={symbol} className="h-4 w-4 inline-block align-text-bottom mx-px" />;
         }
         return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
     });
+};
+
+// --- NOVÁ POMOCNÁ FUNKCE (identická jako v TemplateEditoru) ---
+const generateMaskedGradientStyle = (template: Template): React.CSSProperties => {
+    if (!template.gradientStartColor || !template.gradientEndColor || !template.frameImageUrl) {
+        return {};
+    }
+    const angle = template.gradientAngle ?? 180;
+    const opacity = template.gradientOpacity ?? 0.5;
+    const start = template.gradientStartColor;
+    const end = template.gradientEndColor;
+
+    return {
+        background: `linear-gradient(${angle}deg, ${start}, ${end})`,
+        opacity: opacity,
+        maskImage: `url("${template.frameImageUrl}")`,
+        maskSize: '100% 100%',
+        maskRepeat: 'no-repeat',
+        maskMode: 'alpha',
+        WebkitMaskImage: `url("${template.frameImageUrl}")`,
+        WebkitMaskSize: '100% 100%',
+        WebkitMaskRepeat: 'no-repeat',
+    };
 };
 
 
@@ -33,12 +55,14 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         rarity, artist, collectorNumber, setSymbolUrl
     } = cardData;
     
-    const { elements, fonts, frameImageUrl } = template;
+    // --- ZÍSKÁNÍ NOVÝCH VLASTNOSTÍ Z ŠABLONY ---
+    const { elements, fonts, frameImageUrl, saturation, hue } = template;
     const isCreature = cardType === CardType.Creature;
     const rarityColor = RARITY_COLORS[rarity];
     const parsedCost = manaCost.replace(/\{/g, ' ').replace(/\}/g, ' ').trim().split(/\s+/);
 
-    const getElementStyle = (el: keyof Template['elements'], zIndex: number = 2): React.CSSProperties => ({
+    // --- ÚPRAVA: Zvýšíme defaultní z-index, aby byly elementy nad vrstvou přechodu ---
+    const getElementStyle = (el: keyof Template['elements'], zIndex: number = 3): React.CSSProperties => ({
         position: 'absolute',
         left: `${elements[el].x}%`,
         top: `${elements[el].y}%`,
@@ -65,17 +89,32 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         <div 
             className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black"
         >
+            {/* Art obrázek karty (z-index: 0) */}
             <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
                 <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
             </div>
 
+            {/* --- ZÁKLADNÍ RÁMEČEK S APLIKOVANÝMI FILTRY (z-index: 1) --- */}
             <img 
                 src={frameImageUrl} 
                 alt="Card Frame" 
                 className="absolute top-0 left-0 w-full h-full pointer-events-none" 
-                style={{ zIndex: 1 }}
+                style={{ 
+                    zIndex: 1,
+                    filter: `saturate(${saturation ?? 1}) hue-rotate(${hue ?? 0}deg)`
+                }}
+            />
+            
+            {/* --- NOVÁ VRSTVA PRO MASKOVANÝ PŘECHOD (z-index: 2) --- */}
+            <div 
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    ...generateMaskedGradientStyle(template),
+                    zIndex: 2
+                }}
             />
 
+            {/* --- Všechny textové a symbolové elementy (z-index: 3) --- */}
             <div style={getElementStyle('title')}>
                 <p style={getFontStyle('title')}>{name}</p>
             </div>
@@ -92,18 +131,15 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
             </div>
 
-            {/* --- OPRAVA: Místo mapování na <p> použijeme jeden hlavní <div> --- */}
             <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: '5px' }}>
                 <div style={getFontStyle('rulesText')}>
                     {rulesText.split('\n').map((line, i) => (
-                        // Každý řádek je nyní samostatný <div>, což je validní
                         <div key={i}>{parseTextWithSymbols(line)}</div>
                     ))}
                 </div>
                  {flavorText && (
                     <div style={{...getFontStyle('flavorText'), paddingTop: '8px' }}>
                        {flavorText.split('\n').map((line, i) => (
-                           // Každý řádek je nyní samostatný <div>
                            <div key={i}>{line}</div>
                         ))}
                     </div>

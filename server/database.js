@@ -30,6 +30,7 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             FOREIGN KEY (user_id) REFERENCES users (id)
         )`);
 
+        // --- ZMĚNA ZDE: Přidány nové sloupce pro barevné úpravy ---
         db.run(`CREATE TABLE IF NOT EXISTS templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -37,10 +38,15 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             frame_image_url TEXT,
             elements TEXT,
             fonts TEXT,
+            saturation REAL,
+            hue INTEGER,
+            gradient_angle INTEGER,
+            gradient_opacity REAL,
+            gradient_start_color TEXT,
+            gradient_end_color TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )`);
 
-        // --- NOVÁ TABULKA PRO BALÍČKY ---
         db.run(`CREATE TABLE IF NOT EXISTS decks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -50,12 +56,11 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )`);
 
-        // --- NOVÁ TABULKA PRO KARTY V BALÍČCÍCH ---
         db.run(`CREATE TABLE IF NOT EXISTS deck_cards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             deck_id INTEGER NOT NULL,
-            card_data TEXT NOT NULL, -- Uložíme celá data karty jako JSON
-            template_data TEXT NOT NULL, -- Uložíme i šablonu použitou pro kartu
+            card_data TEXT NOT NULL,
+            template_data TEXT NOT NULL,
             added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
         )`);

@@ -6,7 +6,6 @@ interface DraggableResizableBoxProps {
     position: TemplateElement;
     onUpdate: (position: TemplateElement) => void;
     isSelected: boolean;
-    // --- ZMĚNA ZDE: Upravujeme typ, aby funkce přijímala MouseEvent ---
     onClick: (event: MouseEvent<HTMLDivElement>) => void;
     children: React.ReactNode;
 }
@@ -21,10 +20,7 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
 
     const handleMouseDown = (e: MouseEvent<HTMLDivElement>, currentAction: DragAction) => {
         e.preventDefault();
-        // Zde e.stopPropagation() necháme, aby se neproklikávalo dál
         e.stopPropagation(); 
-        
-        // --- ZMĚNA ZDE: Předáváme "e" (event) do rodičovské komponenty ---
         onClick(e); 
         
         setAction(currentAction);
@@ -84,7 +80,8 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
         border: isSelected ? '2px solid #facc15' : '1px dashed rgba(255, 255, 255, 0.5)',
         cursor: action === 'move' ? 'grabbing' : 'grab',
         transition: action ? 'none' : 'border-color 0.2s',
-        zIndex: 2,
+        // ZVÝŠENÍ Z-INDEX, ABY BYL NAD PŘECHODEM
+        zIndex: 3,
     };
 
     const handleStyle: React.CSSProperties = {

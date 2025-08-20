@@ -1,5 +1,4 @@
-
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react'; // ZDE OPRAVA: Odstraněno nepotřebné "a"
 
 interface ArtCropperProps {
     imageUrl: string;
@@ -20,7 +19,7 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
 
     const draw = useCallback(() => {
         const image = imageRef.current;
-        if (!image.src) return;
+        if (!image.src || image.naturalWidth === 0) return;
         
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -31,7 +30,6 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
         const container = containerRef.current;
         if (!container) return;
 
-        // Set canvas to display size for sharp rendering
         const rect = container.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
@@ -39,7 +37,6 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
         const imageAspectRatio = image.naturalWidth / image.naturalHeight;
         
         let initialWidth, initialHeight;
-
         if (imageAspectRatio > aspectRatio) {
             initialHeight = canvas.height;
             initialWidth = initialHeight * imageAspectRatio;
@@ -51,39 +48,50 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
         const scaledWidth = initialWidth * zoom;
         const scaledHeight = initialHeight * zoom;
 
-        // Clamp offsets
-        const maxOffsetX = (scaledWidth - canvas.width) / 2;
-        const maxOffsetY = (scaledHeight - canvas.height) / 2;
+        const maxOffsetX = Math.max(0, (scaledWidth - canvas.width) / 2);
+        const maxOffsetY = Math.max(0, (scaledHeight - canvas.height) / 2);
+        
         const clampedX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offset.x));
         const clampedY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offset.y));
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(
             image,
-            canvas.width / 2 - scaledWidth / 2 + clampedX,
-            canvas.height / 2 - scaledHeight / 2 + clampedY,
+            (canvas.width - scaledWidth) / 2 + clampedX,
+            (canvas.height - scaledHeight) / 2 + clampedY,
             scaledWidth,
             scaledHeight
         );
-    }, [zoom, offset, aspectRatio]);
-
+    }, [aspectRatio, zoom, offset]);
 
     useEffect(() => {
         const image = imageRef.current;
         image.crossOrigin = "anonymous";
         image.src = imageUrl;
-        image.onload = () => {
+
+        const onLoad = () => {
             setZoom(1);
-            setOffset({x: 0, y: 0});
-            draw();
+            setOffset({ x: 0, y: 0 });
         };
-    }, [imageUrl, draw]);
+        const onError = () => {
+            console.error("Chyba při načítání obrázku pro ořezávač:", imageUrl);
+        };
+        
+        image.addEventListener('load', onLoad);
+        image.addEventListener('error', onError);
+
+        return () => {
+             image.removeEventListener('load', onLoad);
+             image.removeEventListener('error', onError);
+        };
+    }, [imageUrl]);
     
     useEffect(() => {
         draw();
-    }, [draw, zoom, offset]);
+    }, [draw]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
         setIsDragging(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
     };
@@ -108,48 +116,57 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
 
     const handleCrop = () => {
         const image = imageRef.current;
-        const canvas = document.createElement('canvas');
+        const container = containerRef.current;
+        if (!container || image.naturalWidth === 0) return;
 
+        const outputCanvas = document.createElement('canvas');
         const desiredWidth = 800;
-        canvas.width = desiredWidth;
-        canvas.height = desiredWidth / aspectRatio;
+        const displayWidth = container.getBoundingClientRect().width;
+        const scale = displayWidth > 0 ? desiredWidth / displayWidth : 1;
 
-        const ctx = canvas.getContext('2d');
+        outputCanvas.width = desiredWidth;
+        outputCanvas.height = desiredWidth / aspectRatio;
+
+        const ctx = outputCanvas.getContext('2d');
         if (!ctx) return;
-        
+
         const imageAspectRatio = image.naturalWidth / image.naturalHeight;
-        
         let initialWidth, initialHeight;
         if (imageAspectRatio > aspectRatio) {
-            initialHeight = canvas.height;
+            initialHeight = outputCanvas.height;
             initialWidth = initialHeight * imageAspectRatio;
         } else {
-            initialWidth = canvas.width;
+            initialWidth = outputCanvas.width;
             initialHeight = initialWidth / imageAspectRatio;
         }
-        
+
         const scaledWidth = initialWidth * zoom;
         const scaledHeight = initialHeight * zoom;
+        
+        const scaledOffset = { x: offset.x * scale, y: offset.y * scale };
 
-        const maxOffsetX = (scaledWidth - canvas.width) / 2;
-        const maxOffsetY = (scaledHeight - canvas.height) / 2;
-        const clampedX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offset.x));
-        const clampedY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offset.y));
+        const maxOffsetX = Math.max(0, (scaledWidth - outputCanvas.width) / 2);
+        const maxOffsetY = Math.max(0, (scaledHeight - outputCanvas.height) / 2);
+        const clampedX = Math.max(-maxOffsetX, Math.min(maxOffsetX, scaledOffset.x));
+        const clampedY = Math.max(-maxOffsetY, Math.min(maxOffsetY, scaledOffset.y));
 
+        ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
         ctx.drawImage(
             image,
-            canvas.width / 2 - scaledWidth / 2 + clampedX,
-            canvas.height / 2 - scaledHeight / 2 + clampedY,
+            (outputCanvas.width - scaledWidth) / 2 + clampedX,
+            (outputCanvas.height - scaledHeight) / 2 + clampedY,
             scaledWidth,
             scaledHeight
         );
-        onCrop(canvas.toDataURL('image/jpeg', 0.9));
+
+        onCrop(outputCanvas.toDataURL('image/jpeg', 0.9));
+        onClose();
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl border border-gray-700 flex flex-col">
-                <h3 className="text-xl font-beleren text-yellow-300 mb-4">Crop & Position Art</h3>
+                <h3 className="text-xl font-beleren text-yellow-300 mb-4">Ořez a pozice obrázku</h3>
                 <div 
                     ref={containerRef}
                     className="w-full bg-gray-900 overflow-hidden relative" 
@@ -158,7 +175,7 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
                 >
                     <canvas
                         ref={canvasRef}
-                        className="w-full h-full cursor-grab"
+                        className="w-full h-full cursor-grab active:cursor-grabbing"
                         onMouseDown={handleMouseDown}
                         onMouseUp={handleMouseUp}
                         onMouseMove={handleMouseMove}
@@ -178,8 +195,8 @@ const ArtCropper: React.FC<ArtCropperProps> = ({ imageUrl, aspectRatio, onCrop, 
                     />
                 </div>
                 <div className="mt-6 flex justify-end gap-4">
-                    <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 transition">Cancel</button>
-                    <button onClick={handleCrop} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 transition">Confirm Crop</button>
+                    <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 transition">Zrušit</button>
+                    <button onClick={handleCrop} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 transition">Potvrdit ořez</button>
                 </div>
             </div>
         </div>

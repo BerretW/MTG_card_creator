@@ -17,7 +17,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(templates[0]?.id || null);
     const [selectedElementKey, setSelectedElementKey] = useState<ElementKey | null>(null);
 
-    // OPRAVA: Hook `useRef` je přesunut na nejvyšší úroveň komponenty.
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const activeTemplate = templates.find(t => t.id === activeTemplateId);
@@ -95,6 +94,19 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
             default: return null;
         }
     };
+    
+    const handleResetGradient = () => {
+        if (!activeTemplate) return;
+        // Odstraníme všechny klíče související s gradientem z objektu šablony
+        const { 
+            gradientStartColor, 
+            gradientEndColor, 
+            gradientAngle, 
+            gradientOpacity, 
+            ...rest 
+        } = activeTemplate;
+        handleUpdateTemplate(rest);
+    };
 
     const renderPropertyControls = () => {
         if (!activeTemplate) return <p className="text-gray-400 text-sm">Vyberte šablonu pro úpravy.</p>;
@@ -113,6 +125,41 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                              <img src={activeTemplate.frameImageUrl} alt="Frame Preview" className="w-full rounded border border-gray-600 my-2 aspect-[375/525] object-contain bg-black" />
                              <input type="file" accept="image/png, image/jpeg" ref={fileInputRef} className="hidden" onChange={handleFrameImageUpload} />
                              <button onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-4 rounded-md bg-blue-600 hover:bg-blue-700 text-sm transition-colors">Změnit obrázek</button>
+                        </div>
+                        
+                        <div className="space-y-3 pt-3 border-t border-gray-600">
+                            <h5 className="font-bold text-gray-300">Barevné úpravy</h5>
+                            <div>
+                                <label className="font-medium text-gray-400">Saturace ({((activeTemplate.saturation ?? 1) * 100).toFixed(0)}%)</label>
+                                <input type="range" min="0" max="2" step="0.05" value={activeTemplate.saturation ?? 1} onChange={e => handleUpdateTemplate({ ...activeTemplate, saturation: parseFloat(e.target.value) })} className="w-full mt-1"/>
+                            </div>
+                            {/* --- NOVÝ POSUVNÍK PRO ODSTÍN (HUE) --- */}
+                            <div>
+                                <label className="font-medium text-gray-400">Odstín ({activeTemplate.hue ?? 0}deg)</label>
+                                <input type="range" min="0" max="360" step="1" value={activeTemplate.hue ?? 0} onChange={e => handleUpdateTemplate({ ...activeTemplate, hue: parseInt(e.target.value) })} className="w-full mt-1"/>
+                            </div>
+                            <div className="space-y-2 pt-2 border-t border-gray-700/50">
+                                <label className="font-medium text-gray-400">Barevný přechod (přes masku)</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <span className="text-xs text-gray-500">Od</span>
+                                        <input type="color" value={activeTemplate.gradientStartColor ?? '#000000'} onChange={e => handleUpdateTemplate({...activeTemplate, gradientStartColor: e.target.value})} className="w-full bg-gray-700 p-0 h-9 border-gray-600 cursor-pointer"/>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500">Do</span>
+                                        <input type="color" value={activeTemplate.gradientEndColor ?? '#ffffff'} onChange={e => handleUpdateTemplate({...activeTemplate, gradientEndColor: e.target.value})} className="w-full bg-gray-700 p-0 h-9 border-gray-600 cursor-pointer"/>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">Úhel</label>
+                                    <input type="range" min="0" max="360" step="1" value={activeTemplate.gradientAngle ?? 180} onChange={e => handleUpdateTemplate({...activeTemplate, gradientAngle: parseInt(e.target.value)})} className="w-full"/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">Průhlednost</label>
+                                    <input type="range" min="0" max="1" step="0.05" value={activeTemplate.gradientOpacity ?? 0.5} onChange={e => handleUpdateTemplate({...activeTemplate, gradientOpacity: parseFloat(e.target.value)})} className="w-full"/>
+                                </div>
+                                 <button onClick={handleResetGradient} className="w-full py-1 px-2 rounded-md bg-gray-600 hover:bg-red-700 text-xs transition-colors">Resetovat přechod</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -134,7 +181,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         };
 
         return (
-            <div>
+             <div>
                 <h4 className="text-lg font-bold text-yellow-300 mb-2 capitalize">{selectedElementKey.replace(/([A-Z])/g, ' $1')}</h4>
                 <div className="space-y-2 text-sm">
                     <button onClick={() => setSelectedElementKey(null)} className="text-yellow-400 hover:underline text-xs mb-2">
@@ -182,6 +229,32 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         );
     };
 
+    // --- FUNKCE PRO GENEROVÁNÍ MASKY S PŘECHODEM ---
+    const generateMaskedGradientStyle = (template: Template): React.CSSProperties => {
+        if (!template.gradientStartColor || !template.gradientEndColor) {
+            return {};
+        }
+        const angle = template.gradientAngle ?? 180;
+        const opacity = template.gradientOpacity ?? 0.5;
+        // Barvy v přechodu již nemusí mít alfa kanál, protože ho řídí maska a celková opacita elementu
+        const start = template.gradientStartColor;
+        const end = template.gradientEndColor;
+
+        return {
+            background: `linear-gradient(${angle}deg, ${start}, ${end})`,
+            opacity: opacity, // Celková průhlednost vrstvy přechodu
+            maskImage: `url("${template.frameImageUrl}")`,
+            maskSize: '100% 100%',
+            maskRepeat: 'no-repeat',
+            maskMode: 'alpha',
+            // Pro kompatibilitu se staršími prohlížeči (Safari)
+            WebkitMaskImage: `url("${template.frameImageUrl}")`,
+            WebkitMaskSize: '100% 100%',
+            WebkitMaskRepeat: 'no-repeat',
+        };
+    };
+
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-800 rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[90vh] border border-gray-700 flex flex-col">
@@ -218,7 +291,25 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                     <main className="w-3/4 flex items-center justify-center p-4 bg-gray-900">
                          {activeTemplate ? (
                             <div className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black" onClick={() => setSelectedElementKey(null)}>
-                                <img src={activeTemplate.frameImageUrl} alt="Template Frame" className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }} />
+                                {/* --- ZÁKLADNÍ OBRÁZEK S FILTRY --- */}
+                                <img 
+                                    src={activeTemplate.frameImageUrl} 
+                                    alt="Template Frame" 
+                                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                                    style={{ 
+                                        zIndex: 1,
+                                        filter: `saturate(${activeTemplate.saturation ?? 1}) hue-rotate(${activeTemplate.hue ?? 0}deg)`
+                                    }} 
+                                />
+                                {/* --- VRSTVA S MASKOVANÝM PŘECHODEM --- */}
+                                <div 
+                                    className="absolute inset-0 pointer-events-none"
+                                    style={{
+                                        ...generateMaskedGradientStyle(activeTemplate),
+                                        zIndex: 2
+                                    }}
+                                />
+                                {/* --- PŘESOUVATELNÉ BOXY (z-index 3) --- */}
                                 {(Object.keys(activeTemplate.elements) as ElementKey[]).map(key => (
                                     <DraggableResizableBox 
                                         key={key} 

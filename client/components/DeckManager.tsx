@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom/client';
+import jsPDF from 'jspdf';
+import { toPng } from 'html-to-image';
 import { assetService } from '../services/assetService';
 import { Deck, SavedCard } from '../types';
 import CardPreview from './CardPreview';
 
 interface DeckManagerProps {
     onClose: () => void;
-    onEditCard: (card: SavedCard) => void; // Nová prop pro odeslání karty k úpravě
+    onEditCard: (card: SavedCard) => void;
 }
 
 const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     const [decks, setDecks] = useState<Deck[]>([]);
     const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    
-    // Nový stav pro zobrazení detailu karty
     const [viewingCard, setViewingCard] = useState<SavedCard | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     const fetchDecks = useCallback(() => {
         setIsLoading(true);
@@ -29,7 +31,7 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     
     const handleSelectDeck = async (deckId: number) => {
         setIsLoading(true);
-        setViewingCard(null); // Skryjeme detail karty při změně balíčku
+        setViewingCard(null);
         try {
             const fullDeck = await assetService.getDeckById(deckId);
             setSelectedDeck(fullDeck);
@@ -70,6 +72,85 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
         }
     };
 
+    const handleExportDeckToPdf = async () => {
+        if (!selectedDeck?.cards || selectedDeck.cards.length === 0) return;
+        setIsExporting(true);
+
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const CARDS_PER_PAGE = 9;
+        const cardChunks = [];
+
+        for (let i = 0; i < selectedDeck.cards.length; i += CARDS_PER_PAGE) {
+            cardChunks.push(selectedDeck.cards.slice(i, i + CARDS_PER_PAGE));
+        }
+
+        // Vytvoříme dočasný skrytý kontejner pro renderování
+        const printContainer = document.createElement('div');
+        printContainer.style.position = 'absolute';
+        printContainer.style.left = '-9999px';
+        printContainer.style.top = '0';
+        document.body.appendChild(printContainer);
+
+        try {
+            for (let i = 0; i < cardChunks.length; i++) {
+                const chunk = cardChunks[i];
+                
+                // Vytvoříme grid pro aktuální stránku
+                const pageGrid = document.createElement('div');
+                pageGrid.style.display = 'grid';
+                pageGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+                pageGrid.style.gap = '5px';
+                pageGrid.style.padding = '5px';
+                pageGrid.style.backgroundColor = 'white';
+                pageGrid.style.width = `${375 * 3 + 20}px`; // Šířka 3 karet + mezery
+                printContainer.appendChild(pageGrid);
+
+                const root = ReactDOM.createRoot(pageGrid);
+                await new Promise<void>(resolve => {
+                    root.render(
+                        <React.StrictMode>
+                             {chunk.map(savedCard => (
+                                <CardPreview 
+                                    key={savedCard.id}
+                                    cardData={savedCard.card_data} 
+                                    template={savedCard.template_data} 
+                                />
+                            ))}
+                        </React.StrictMode>,
+                        () => resolve()
+                    );
+                });
+
+                // Dáme malou pauzu, aby se obrázky stihly načíst
+                await new Promise(r => setTimeout(r, 1000)); 
+
+                const dataUrl = await toPng(pageGrid, { pixelRatio: 2 });
+                
+                if (i > 0) {
+                    pdf.addPage();
+                }
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                // Uklidíme po sobě
+                root.unmount();
+                printContainer.removeChild(pageGrid);
+            }
+
+            pdf.save(`${selectedDeck.name.replace(/\s+/g, '_')}.pdf`);
+
+        } catch (error) {
+            console.error("Chyba při generování PDF:", error);
+            alert("Během exportu do PDF došlo k chybě.");
+        } finally {
+            // Finální úklid
+            document.body.removeChild(printContainer);
+            setIsExporting(false);
+        }
+    };
+
     return (
         <>
             <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
@@ -97,7 +178,19 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                             {!selectedDeck && <p className="text-gray-400 text-center mt-8">Vyberte balíček ze seznamu.</p>}
                             {selectedDeck && (
                                 <div>
-                                    <h4 className="text-2xl font-beleren text-yellow-200 mb-4">{selectedDeck.name}</h4>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="text-2xl font-beleren text-yellow-200">{selectedDeck.name}</h4>
+                                        {selectedDeck.cards && selectedDeck.cards.length > 0 && (
+                                            <button
+                                                onClick={handleExportDeckToPdf}
+                                                disabled={isExporting}
+                                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base disabled:bg-gray-500 disabled:cursor-wait"
+                                            >
+                                                {isExporting ? 'Generuji PDF...' : 'Exportovat balíček do PDF'}
+                                            </button>
+                                        )}
+                                    </div>
+
                                     {selectedDeck.cards && selectedDeck.cards.length > 0 ? (
                                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-4">
                                             {selectedDeck.cards.map(savedCard => (
@@ -123,7 +216,6 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                 </div>
             </div>
 
-            {/* Modální okno pro detailní náhled karty */}
             {viewingCard && (
                 <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]" onClick={() => setViewingCard(null)}>
                     <div className="relative" onClick={(e) => e.stopPropagation()}>

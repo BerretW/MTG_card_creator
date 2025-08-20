@@ -1,4 +1,3 @@
-
 export enum CardType {
     Creature = "Creature",
     Instant = "Instant",
@@ -16,12 +15,10 @@ export enum Rarity {
     Mythic = "Mythic",
 }
 
-
 export interface CardArt {
     original: string; // URL na původní, ne-oříznutý obrázek
     cropped: string;  // URL na oříznutou verzi pro zobrazení
 }
-
 
 export interface CardData {
     name: string;
@@ -81,6 +78,13 @@ export interface Template {
         artist: FontProperties;
         collectorNumber: FontProperties;
     };
+    // --- ROZŠÍŘENÉ VLASTNOSTI ---
+    saturation?: number;
+    hue?: number; // Nová vlastnost pro odstín
+    gradientAngle?: number;
+    gradientOpacity?: number;
+    gradientStartColor?: string;
+    gradientEndColor?: string;
 }
 
 export interface ArtAsset {
@@ -93,7 +97,6 @@ export interface CustomSetSymbol {
     name: string;
     url: string;
 }
-
 
 export interface SavedCard {
     id: number;
