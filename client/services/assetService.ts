@@ -170,5 +170,14 @@ export const assetService = {
             headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) throw new Error('Nepodařilo se odebrat kartu z balíčku.');
-    }
+    },
+     updateCardInDeck: async (deckId: number, cardId: number, card_data: CardData, template_data: Template): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/decks/${deckId}/cards/${cardId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ card_data, template_data }),
+        });
+        if (!response.ok) throw new Error('Nepodařilo se aktualizovat kartu.');
+    },
 };

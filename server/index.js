@@ -301,6 +301,36 @@ app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => 
 });
 
 
+// --- NOVÁ CESTA: AKTUALIZACE KONKRÉTNÍ KARTY V BALÍČKU ---
+app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
+    const { card_data, template_data } = req.body;
+    if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
+
+    // Prvně ověříme, že balíček patří přihlášenému uživateli
+    db.get("SELECT user_id FROM decks WHERE id = ?", [req.params.deckId], (err, deck) => {
+        if (err) return res.status(500).json({ message: "Chyba databáze při ověřování balíčku." });
+        if (!deck || deck.user_id !== req.user.id) {
+            return res.status(403).json({ message: "Nemáte oprávnění k tomuto balíčku." });
+        }
+
+        // Pokud je oprávnění v pořádku, aktualizujeme kartu
+        const sql = "UPDATE deck_cards SET card_data = ?, template_data = ? WHERE id = ? AND deck_id = ?";
+        const params = [
+            JSON.stringify(card_data),
+            JSON.stringify(template_data),
+            req.params.cardId,
+            req.params.deckId
+        ];
+
+        db.run(sql, params, function(err) {
+            if (err) return res.status(500).json({ message: "Chyba při aktualizaci karty." });
+            if (this.changes === 0) return res.status(404).json({ message: "Karta v balíčku nenalezena." });
+            res.status(200).json({ message: "Karta úspěšně aktualizována." });
+        });
+    });
+});
+
+
 // --- Spuštění serveru ---
 app.listen(PORT, () => {
     console.log(`Server běží na portu ${PORT}`);

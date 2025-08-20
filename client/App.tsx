@@ -1,24 +1,27 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { toPng } from 'html-to-image';
-import { CardData, Template, ArtAsset, CustomSetSymbol } from './types';
+import { CardData, Template, ArtAsset, CustomSetSymbol, SavedCard } from './types';
 import EditorPanel from './components/EditorPanel';
 import CardPreview from './components/CardPreview';
 import TemplateEditor from './components/TemplateEditor';
 import Auth from './components/Auth';
-import AddToDeckModal from './components/AddToDeckModal'; // Import pro ukládání do balíčku
-import DeckManager from './components/DeckManager'; // Import pro správu balíčků
+import AddToDeckModal from './components/AddToDeckModal';
+import DeckManager from './components/DeckManager';
 import { DEFAULT_CARD_DATA } from './constants';
 import { assetService } from './services/assetService';
 
 const App: React.FC = () => {
-    // --- Autentizace a hlavní stavy ---
+    // --- Stavy ---
     const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
     const [cardData, setCardData] = useState<CardData>(DEFAULT_CARD_DATA);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [artAssets, setArtAssets] = useState<ArtAsset[]>([]);
     const [customSetSymbols, setCustomSetSymbols] = useState<CustomSetSymbol[]>([]);
     
-    // --- Stavy pro ovládání modálních oken ---
+    // --- Stav pro sledování úpravy existující karty ---
+    const [editingCardInfo, setEditingCardInfo] = useState<{cardId: number, deckId: number} | null>(null);
+
+    // --- Stavy pro modální okna ---
     const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
     const [isAddToDeckModalOpen, setAddToDeckModalOpen] = useState(false);
     const [isDeckManagerOpen, setDeckManagerOpen] = useState(false);
@@ -29,7 +32,6 @@ const App: React.FC = () => {
 
     const cardPreviewRef = useRef<HTMLDivElement>(null);
     
-    // Načítání všech potřebných dat po přihlášení
     useEffect(() => {
         if (!token) {
             setIsLoading(false);
@@ -74,6 +76,7 @@ const App: React.FC = () => {
         setArtAssets([]);
         setCustomSetSymbols([]);
         setTemplates([]);
+        setEditingCardInfo(null); // Reset i při odhlášení
     };
 
     const handleArtUpdate = (originalUrl: string, croppedUrl: string) => {
@@ -123,17 +126,39 @@ const App: React.FC = () => {
             .catch((err) => console.error('oops, something went wrong!', err));
     }, [cardPreviewRef, cardData.name]);
 
-    const handleReset = () => setCardData(DEFAULT_CARD_DATA);
+    const handleReset = () => {
+        setCardData(DEFAULT_CARD_DATA);
+        setEditingCardInfo(null); // Zrušíme režim úprav
+    };
 
     const handleDecksUpdated = () => {
-        // Tato funkce je zde pro případ, že bychom v budoucnu potřebovali
-        // globálně obnovit data o balíčcích po nějaké akci v modálním okně.
+        // Callback pro budoucí použití
+    };
+    
+    const handleEditCard = (cardToEdit: SavedCard) => {
+        setCardData(cardToEdit.card_data);
+        setEditingCardInfo({ cardId: cardToEdit.id, deckId: cardToEdit.deck_id });
+        setDeckManagerOpen(false);
+    };
+
+    const handleUpdateCard = async () => {
+        if (!editingCardInfo || !selectedTemplate) return;
+        try {
+            await assetService.updateCardInDeck(
+                editingCardInfo.deckId,
+                editingCardInfo.cardId,
+                cardData,
+                selectedTemplate
+            );
+            alert("Karta byla úspěšně aktualizována!");
+            setEditingCardInfo(null); // Vypneme režim úprav
+        } catch (error) {
+            alert(`Chyba při aktualizaci karty: ${error}`);
+        }
     };
     
     const selectedTemplate = templates.find(t => t.id === cardData.templateId) || templates[0];
     
-    // --- Renderovací logika ---
-
     if (!token) { return <Auth onLoginSuccess={handleLoginSuccess} />; }
     if (isLoading) { return <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-beleren text-2xl">Načítání...</div>; }
     if (error) { return <div className="min-h-screen bg-gray-900 text-red-500 flex items-center justify-center text-xl">{error}</div>; }
@@ -185,13 +210,24 @@ const App: React.FC = () => {
                          <CardPreview cardData={cardData} template={selectedTemplate} />
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
-                        <button onClick={() => setAddToDeckModalOpen(true)} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-1">
-                            Uložit do balíčku
-                        </button>
-                        <button onClick={handleDownload} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold transition order-2">
+                        {editingCardInfo ? (
+                            <>
+                                <button onClick={handleUpdateCard} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold transition order-1">
+                                    Uložit změny
+                                </button>
+                                <button onClick={() => setAddToDeckModalOpen(true)} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-2">
+                                    Uložit jako kopii
+                                </button>
+                            </>
+                        ) : (
+                            <button onClick={() => setAddToDeckModalOpen(true)} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-1">
+                                Uložit do balíčku
+                            </button>
+                        )}
+                        <button onClick={handleDownload} className="py-2 px-6 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold transition order-3">
                             Exportovat PNG
                         </button>
-                        <button onClick={handleReset} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 text-white font-bold transition order-3">
+                        <button onClick={handleReset} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 text-white font-bold transition order-4">
                             Resetovat kartu
                         </button>
                     </div>
@@ -216,7 +252,10 @@ const App: React.FC = () => {
             )}
 
             {isDeckManagerOpen && (
-                <DeckManager onClose={() => setDeckManagerOpen(false)} />
+                <DeckManager 
+                    onClose={() => setDeckManagerOpen(false)} 
+                    onEditCard={handleEditCard}
+                />
             )}
         </div>
     );
