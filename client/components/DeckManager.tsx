@@ -8,39 +8,30 @@ import CardPreview from './CardPreview';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-// --- POMOCNÉ FUNKCE PRO PDF ---
 const CARD_WIDTH_MM = 63;
 const CARD_HEIGHT_MM = 88;
 
 const drawCropMarks = (doc: jsPDF, x: number, y: number, width: number, height: number) => {
-    const len = 4; // Délka značky v mm
-    const off = 1; // Odsazení značky od rohu v mm
+    const len = 4;
+    const off = 1;
     doc.setLineWidth(0.1);
     doc.setDrawColor(0);
-
-    // Horní levý roh
     doc.line(x - off, y, x - off - len, y);
     doc.line(x, y - off, x, y - off - len);
-    // Horní pravý roh
     doc.line(x + width + off, y, x + width + off + len, y);
     doc.line(x + width, y - off, x + width, y - off - len);
-    // Dolní levý roh
     doc.line(x - off, y + height, x - off - len, y + height);
     doc.line(x, y + height + off, x, y + height + off + len);
-    // Dolní pravý roh
-    doc.line(x + width + off, y, x + width + off + len, y);
+    doc.line(x + width + off, y + height, x + width + off + len, y + height);
     doc.line(x + width, y + height + off, x + width, y + height + off + len);
 };
 
-// Funkce, která vrátí URL přes naši proxy, pokud je to externí zdroj
 const getProxiedUrl = (url: string): string => {
     if (url && url.startsWith('http') && !url.startsWith(window.location.origin) && !url.startsWith(API_URL)) {
         return `${API_URL}/api/image-proxy?url=${encodeURIComponent(url)}`;
     }
     return url;
 };
-// ------------------------------
-
 
 interface DeckManagerProps {
     onClose: () => void;
@@ -129,14 +120,12 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
         printContainer.style.left = '-9999px';
         printContainer.style.top = '0';
         document.body.appendChild(printContainer);
-        const root = ReactDOM.createRoot(printContainer);
 
         try {
             for (let i = 0; i < cardsToExport.length; i++) {
                 setExportProgress(`Zpracovávám kartu ${i + 1}/${cardsToExport.length}...`);
                 const savedCard = cardsToExport[i];
 
-                // Vytvoříme kopie dat a proženeme URL přes proxy
                 const proxiedCardData: CardData = {
                     ...savedCard.card_data,
                     art: {
@@ -150,33 +139,36 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                     frameImageUrl: getProxiedUrl(savedCard.template_data.frameImageUrl),
                 };
 
-                // Vykreslíme JEDNU kartu s proxovanými daty
+                // Vytvoříme nový, čistý root pro každou kartu
+                const root = ReactDOM.createRoot(printContainer);
                 await new Promise<void>(resolve => {
                     root.render(
                         <CardPreview cardData={proxiedCardData} template={proxiedTemplateData} />
                     );
-                    requestAnimationFrame(() => resolve());
+                    // Pevná pauza je zde spolehlivější než requestAnimationFrame
+                    setTimeout(resolve, 300);
                 });
                 
-                // Vygenerujeme obrázek této jedné karty
                 const cardDataUrl = await toPng(printContainer.firstElementChild as HTMLElement, {
-                    pixelRatio: 3, // Vyšší kvalita pro tisk
+                    pixelRatio: 3,
                     quality: 1.0,
+                    cacheBust: true, // Důležité pro načtení proxovaných obrázků
                 });
+                
+                // Uklidíme po sobě PŘED další iterací
+                root.unmount();
+                printContainer.innerHTML = ''; // Pro jistotu
 
-                // Zjistíme, jestli máme přidat novou stránku
                 const cardIndexOnPage = i % CARDS_PER_PAGE;
                 if (i > 0 && cardIndexOnPage === 0) {
                     pdf.addPage();
                 }
 
-                // Vypočítáme pozici karty na stránce
                 const row = Math.floor(cardIndexOnPage / 3);
                 const col = cardIndexOnPage % 3;
                 const x = marginX + col * CARD_WIDTH_MM;
                 const y = marginY + row * CARD_HEIGHT_MM;
                 
-                // Přidáme obrázek a ořezové značky do PDF
                 pdf.addImage(cardDataUrl, 'PNG', x, y, CARD_WIDTH_MM, CARD_HEIGHT_MM);
                 drawCropMarks(pdf, x, y, CARD_WIDTH_MM, CARD_HEIGHT_MM);
             }
@@ -188,13 +180,11 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
             console.error("Chyba při generování PDF:", error);
             alert("Během exportu do PDF došlo k chybě. Více informací naleznete v konzoli.");
         } finally {
-            root.unmount();
             document.body.removeChild(printContainer);
             setIsExporting(false);
             setExportProgress('');
         }
     };
-
 
     return (
         <>
@@ -237,17 +227,21 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                                     </div>
 
                                     {selectedDeck.cards && selectedDeck.cards.length > 0 ? (
-                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-4">
+                                        <div 
+                                            className="grid gap-5 justify-items-center"
+                                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(225px, 1fr))' }}
+                                        >
                                             {selectedDeck.cards.map(savedCard => (
-                                                <div key={savedCard.id} className="relative group cursor-pointer" onClick={() => setViewingCard(savedCard)}>
-                                                    <img 
-                                                        src={savedCard.card_data.art.cropped} 
-                                                        alt={savedCard.card_data.name} 
-                                                        className="w-full rounded-md aspect-[5/7] object-cover bg-gray-900 border-2 border-transparent group-hover:border-yellow-400 transition-all"
+                                                <div 
+                                                    key={savedCard.id} 
+                                                    className="relative group cursor-pointer transition-transform duration-200 hover:scale-105 hover:z-10" 
+                                                    onClick={() => setViewingCard(savedCard)}
+                                                >
+                                                    <CardPreview 
+                                                        cardData={savedCard.card_data} 
+                                                        template={savedCard.template_data} 
+                                                        scale={0.6}
                                                     />
-                                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                        <p className="text-white text-xs text-center p-1">{savedCard.card_data.name}</p>
-                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -261,27 +255,39 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                 </div>
             </div>
 
-            {viewingCard && (
-                <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]" onClick={() => setViewingCard(null)}>
-                    <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
-                        <div className="mt-4 flex justify-center gap-4">
-                            <button 
-                                onClick={handleStartEdit}
-                                className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
-                            >
-                                Upravit tuto kartu
-                            </button>
-                            <button 
-                                onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
-                                className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
-                            >
-                                Odebrat z balíčku
-                            </button>
+            <div 
+                className={`fixed inset-0 z-[60] flex items-center justify-center transition-opacity duration-300 ease-in-out
+                    ${viewingCard ? 'bg-black bg-opacity-80 opacity-100' : 'bg-opacity-0 opacity-0 pointer-events-none'}`
+                }
+                onClick={() => setViewingCard(null)}
+            >
+                <div 
+                    className={`transition-all duration-300 ease-in-out
+                        ${viewingCard ? 'scale-100 opacity-100' : 'scale-90 opacity-0'}`
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {viewingCard && (
+                        <div className="relative">
+                            <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
+                            <div className="mt-4 flex justify-center gap-4">
+                                <button 
+                                    onClick={handleStartEdit}
+                                    className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
+                                >
+                                    Upravit tuto kartu
+                                </button>
+                                <button 
+                                    onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
+                                    className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
+                                >
+                                    Odebrat z balíčku
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
-            )}
+            </div>
         </>
     );
 };

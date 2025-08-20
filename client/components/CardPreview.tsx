@@ -6,6 +6,7 @@ import { RARITY_COLORS } from '../constants';
 interface CardPreviewProps {
     cardData: CardData;
     template: Template;
+    scale?: number; // << NOVÁ PROPRIETA (např. 0.6 pro 60% velikost)
 }
 
 const parseTextWithSymbols = (text: string) => {
@@ -14,13 +15,14 @@ const parseTextWithSymbols = (text: string) => {
     return parts.map((part, index) => {
         if (part.startsWith('{') && part.endsWith('}')) {
             const symbol = part.replace(/[{}]/g, '');
-            return <ManaSymbol key={`${symbol}-${index}`} symbol={symbol} className="h-4 w-4 inline-block align-text-bottom mx-px" />;
+            // Velikost symbolu v textu bude také škálována
+            const symbolSize = 16 * (index === 0 ? 1 : (part.match(/T/) ? 20 : 1)); // Placeholder pro tap symbol
+            return <ManaSymbol key={`${symbol}-${index}`} symbol={symbol} className="inline-block align-text-bottom mx-px" style={{ height: `${symbolSize}px`, width: `${symbolSize}px`}}/>;
         }
         return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
     });
 };
 
-// --- NOVÁ POMOCNÁ FUNKCE (identická jako v TemplateEditoru) ---
 const generateMaskedGradientStyle = (template: Template): React.CSSProperties => {
     if (!template.gradientStartColor || !template.gradientEndColor || !template.frameImageUrl) {
         return {};
@@ -44,7 +46,7 @@ const generateMaskedGradientStyle = (template: Template): React.CSSProperties =>
 };
 
 
-const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
+const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1 }) => {
     if (!template) {
         return <div className="w-[375px] h-[525px] bg-red-500 text-white flex items-center justify-center">Šablona nebyla nalezena!</div>;
     }
@@ -55,13 +57,11 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         rarity, artist, collectorNumber, setSymbolUrl
     } = cardData;
     
-    // --- ZÍSKÁNÍ NOVÝCH VLASTNOSTÍ Z ŠABLONY ---
     const { elements, fonts, frameImageUrl, saturation, hue } = template;
     const isCreature = cardType === CardType.Creature;
     const rarityColor = RARITY_COLORS[rarity];
     const parsedCost = manaCost.replace(/\{/g, ' ').replace(/\}/g, ' ').trim().split(/\s+/);
 
-    // --- ÚPRAVA: Zvýšíme defaultní z-index, aby byly elementy nad vrstvou přechodu ---
     const getElementStyle = (el: keyof Template['elements'], zIndex: number = 3): React.CSSProperties => ({
         position: 'absolute',
         left: `${elements[el].x}%`,
@@ -75,26 +75,29 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
 
     const getFontStyle = (font: keyof Template['fonts']): React.CSSProperties => ({
         fontFamily: fonts[font].fontFamily,
-        fontSize: `${fonts[font].fontSize}px`,
+        fontSize: `${fonts[font].fontSize * scale}px`,
         color: fonts[font].color,
         textAlign: fonts[font].textAlign,
         fontStyle: fonts[font].fontStyle || 'normal',
         fontWeight: fonts[font].fontWeight || 'normal',
         width: '100%',
         whiteSpace: 'pre-wrap',
-        lineHeight: '1.2',
+        lineHeight: 1.2, // Ponecháme relativní, aby se správně škáloval s font-size
     });
 
     return (
         <div 
-            className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black"
+            className="overflow-hidden shadow-2xl relative select-none bg-black"
+            style={{
+                width: `${375 * scale}px`,
+                height: `${525 * scale}px`,
+                borderRadius: `${18 * scale}px`,
+            }}
         >
-            {/* Art obrázek karty (z-index: 0) */}
             <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
                 <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
             </div>
 
-            {/* --- ZÁKLADNÍ RÁMEČEK S APLIKOVANÝMI FILTRY (z-index: 1) --- */}
             <img 
                 src={frameImageUrl} 
                 alt="Card Frame" 
@@ -105,7 +108,6 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 }}
             />
             
-            {/* --- NOVÁ VRSTVA PRO MASKOVANÝ PŘECHOD (z-index: 2) --- */}
             <div 
                 className="absolute inset-0 pointer-events-none"
                 style={{
@@ -114,13 +116,12 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 }}
             />
 
-            {/* --- Všechny textové a symbolové elementy (z-index: 3) --- */}
             <div style={getElementStyle('title')}>
                 <p style={getFontStyle('title')}>{name}</p>
             </div>
             
-            <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: '2px'}}>
-                {parsedCost.map((symbol, index) => symbol && <ManaSymbol key={index} symbol={symbol} className="h-6 w-6" />)}
+            <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: `${2 * scale}px`}}>
+                {parsedCost.map((symbol, index) => symbol && <ManaSymbol key={index} symbol={symbol} className={`inline-block`} style={{ height: `${24 * scale}px`, width: `${24 * scale}px`}} />)}
             </div>
 
             <div style={getElementStyle('typeLine')}>
@@ -131,14 +132,14 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
             </div>
 
-            <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: '5px' }}>
+            <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: `${5 * scale}px` }}>
                 <div style={getFontStyle('rulesText')}>
                     {rulesText.split('\n').map((line, i) => (
                         <div key={i}>{parseTextWithSymbols(line)}</div>
                     ))}
                 </div>
                  {flavorText && (
-                    <div style={{...getFontStyle('flavorText'), paddingTop: '8px' }}>
+                    <div style={{...getFontStyle('flavorText'), paddingTop: `${8 * scale}px` }}>
                        {flavorText.split('\n').map((line, i) => (
                            <div key={i}>{line}</div>
                         ))}

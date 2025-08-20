@@ -1,7 +1,17 @@
-# .dockerignore
+# Ignorovat lokální závislosti, aby se nekopírovaly do Dockeru
 node_modules
-npm-debug.log
-.env
 client/node_modules
 server/node_modules
+
+# Ignorovat logy a lokální konfigurační soubory
+npm-debug.log
+.env
+
+# Ignorovat složky vytvořené IDE
+.vscode
+.idea
+
+# !!! DŮLEŽITÉ !!!
+# Databáze se mapuje přes volume, nekopírovat ji do image
+server/database
 db.sqlite

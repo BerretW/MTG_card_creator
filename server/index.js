@@ -33,6 +33,7 @@ const DEFAULT_TEMPLATES = [
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // --- Multer pro nahrávání souborů ---
 const storage = multer.diskStorage({
@@ -65,6 +66,9 @@ const parseTemplateFromDB = (row) => {
     if (!row) return null;
     return {
         id: row.id,
+        // DŮLEŽITÉ: Přidáváme user_id (ID autora) a jeho jméno do objektu šablony
+        user_id: row.user_id,
+        authorUsername: row.authorUsername,
         name: row.name,
         frameImageUrl: row.frame_image_url,
         elements: JSON.parse(row.elements || '{}'),
@@ -164,7 +168,15 @@ app.post('/api/assets', authenticateToken, upload.single('art'), (req, res) => {
 
 // TEMPLATES (CRUD)
 app.get('/api/templates', authenticateToken, (req, res) => {
-    db.all('SELECT * FROM templates WHERE user_id = ?', [req.user.id], (err, rows) => {
+    // Použijeme LEFT JOIN, abychom získali i šablony od smazaných uživatelů
+    const sql = `
+        SELECT t.*, u.username as authorUsername 
+        FROM templates t
+        LEFT JOIN users u ON t.user_id = u.id
+        ORDER BY t.name ASC
+    `;
+    
+    db.all(sql, [], (err, rows) => {
         if (err) {
             console.error("Database error fetching templates:", err);
             return res.status(500).json({ message: "Chyba při načítání šablon." });
@@ -362,6 +374,12 @@ app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
         });
     });
 });
+
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 
 app.listen(PORT, () => {
     console.log(`Server běží na portu ${PORT}`);

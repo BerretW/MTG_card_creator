@@ -10,6 +10,20 @@ import DeckManager from './components/DeckManager';
 import { DEFAULT_CARD_DATA } from './constants';
 import { assetService } from './services/assetService';
 
+// Pomocná funkce pro získání ID z tokenu
+const getUserIdFromToken = (token: string | null): number | null => {
+    if (!token) return null;
+    try {
+        const payloadBase64 = token.split('.')[1];
+        const decodedPayload = atob(payloadBase64);
+        const payload = JSON.parse(decodedPayload);
+        return payload.id || null;
+    } catch (error) {
+        console.error("Failed to decode token:", error);
+        return null;
+    }
+};
+
 const App: React.FC = () => {
     // --- Stavy ---
     const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
@@ -30,8 +44,15 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // --- NOVÉ: Stavy a ref pro změnu velikosti panelu ---
+    const [editorWidth, setEditorWidth] = useState(480); // Výchozí šířka editoru v px
+    const [isResizing, setIsResizing] = useState(false);
+    const resizeData = useRef({ startX: 0, startWidth: 0 });
+
     const cardPreviewRef = useRef<HTMLDivElement>(null);
     
+    const currentUserId = getUserIdFromToken(token);
+
     useEffect(() => {
         if (!token) {
             setIsLoading(false);
@@ -41,6 +62,7 @@ const App: React.FC = () => {
             setIsLoading(true);
             setError(null);
             try {
+                // Načítáme všechna data současně
                 const [loadedAssets, loadedSymbols, loadedTemplates] = await Promise.all([
                     assetService.getArtAssets(),
                     assetService.getCustomSetSymbols(),
@@ -57,13 +79,49 @@ const App: React.FC = () => {
             } catch (err: any) {
                 console.error("Failed to load user data:", err);
                 setError("Nepodařilo se načíst data. Váš token mohl vypršet.");
-                handleLogout();
+                handleLogout(); // Odhlásíme uživatele, pokud je token neplatný
             } finally {
                 setIsLoading(false);
             }
         };
         loadData();
     }, [token]);
+
+    // --- NOVÉ: Handlery a useEffect pro změnu velikosti ---
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizing(true);
+        resizeData.current = {
+            startX: e.clientX,
+            startWidth: editorWidth,
+        };
+    }, [editorWidth]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing) return;
+        const delta = e.clientX - resizeData.current.startX;
+        const newWidth = resizeData.current.startWidth + delta;
+        // Omezení minimální a maximální šířky
+        const minWidth = 380;
+        const maxWidth = 900;
+        setEditorWidth(Math.max(minWidth, Math.min(newWidth, maxWidth)));
+    }, [isResizing]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing, handleMouseMove, handleMouseUp]);
+
 
     const handleLoginSuccess = (newToken: string) => {
         localStorage.setItem('accessToken', newToken);
@@ -76,7 +134,7 @@ const App: React.FC = () => {
         setArtAssets([]);
         setCustomSetSymbols([]);
         setTemplates([]);
-        setEditingCardInfo(null); // Reset i při odhlášení
+        setEditingCardInfo(null);
     };
 
     const handleArtUpdate = (originalUrl: string, croppedUrl: string) => {
@@ -93,21 +151,43 @@ const App: React.FC = () => {
     };
 
     const handleSaveTemplates = async (templatesFromEditor: Template[]) => {
+        if (currentUserId === null) {
+            alert("Chyba: Nelze ověřit přihlášeného uživatele. Ukládání zrušeno.");
+            return;
+        }
+
         try {
-            const savePromises = templatesFromEditor.map(template => {
-                const { id, ...templateData } = template;
-                if (typeof id === 'string' && id.startsWith('new-')) {
-                    return assetService.createTemplate(templateData as Omit<Template, 'id'>);
-                } else {
-                    return assetService.updateTemplate(template);
-                }
-            });
-            const savedTemplates = await Promise.all(savePromises);
-            setTemplates(savedTemplates);
-            if (!savedTemplates.some(t => t.id === cardData.templateId)) {
-                setCardData(prev => ({ ...prev, templateId: savedTemplates[0]?.id || '' }));
+            const savePromises = templatesFromEditor
+                .map(template => {
+                    const { id, authorUsername, ...templateData } = template; // Odebereme authorUsername
+
+                    if (typeof id === 'string' && id.startsWith('new-')) {
+                        const newTemplateData = { ...templateData, user_id: currentUserId };
+                        return assetService.createTemplate(newTemplateData as Omit<Template, 'id' | 'authorUsername'>);
+                    } 
+                    else if (template.user_id === currentUserId) {
+                        return assetService.updateTemplate(template);
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+
+            if (savePromises.length === 0) {
+                console.log("Nebyly nalezeny žádné šablony k uložení pro tohoto uživatele.");
+                return;
             }
-            alert("Šablony úspěšně uloženy na server!");
+
+            await Promise.all(savePromises as Promise<Template>[]);
+            
+            const allUpdatedTemplates = await assetService.getTemplates();
+            setTemplates(allUpdatedTemplates);
+
+            if (!allUpdatedTemplates.some(t => t.id === cardData.templateId)) {
+                setCardData(prev => ({ ...prev, templateId: allUpdatedTemplates[0]?.id || '' }));
+            }
+
+            alert("Vaše šablony byly úspěšně uloženy!");
+
         } catch (error) {
             console.error("Failed to save templates:", error);
             alert(`Chyba při ukládání šablon: ${error instanceof Error ? error.message : String(error)}`);
@@ -128,11 +208,11 @@ const App: React.FC = () => {
 
     const handleReset = () => {
         setCardData(DEFAULT_CARD_DATA);
-        setEditingCardInfo(null); // Zrušíme režim úprav
+        setEditingCardInfo(null);
     };
 
     const handleDecksUpdated = () => {
-        // Callback pro budoucí použití
+        // Callback for future use, e.g., refreshing deck list if it were visible
     };
     
     const handleEditCard = (cardToEdit: SavedCard) => {
@@ -151,7 +231,7 @@ const App: React.FC = () => {
                 selectedTemplate
             );
             alert("Karta byla úspěšně aktualizována!");
-            setEditingCardInfo(null); // Vypneme režim úprav
+            setEditingCardInfo(null);
         } catch (error) {
             alert(`Chyba při aktualizaci karty: ${error}`);
         }
@@ -190,8 +270,12 @@ const App: React.FC = () => {
                 <p className="text-gray-400 mt-2">Vytvořte si vlastní Magic: The Gathering karty.</p>
             </header>
             
-            <main className="w-full max-w-7xl flex flex-col lg:flex-row gap-8">
-                <div className="w-full lg:w-2/5 xl:w-1/3 bg-gray-800 p-6 rounded-2xl shadow-2xl border border-gray-700">
+            <main className="w-full max-w-7xl flex flex-row gap-0">
+                {/* --- ZMĚNA ZDE: Panely s dynamickou šířkou --- */}
+                <div 
+                    style={{ width: `${editorWidth}px` }} 
+                    className="flex-shrink-0 bg-gray-800 p-6 rounded-l-2xl shadow-2xl border-l border-t border-b border-gray-700 overflow-y-auto"
+                >
                     <EditorPanel 
                         cardData={cardData} 
                         setCardData={setCardData} 
@@ -205,7 +289,13 @@ const App: React.FC = () => {
                     />
                 </div>
 
-                <div className="w-full lg:w-3/5 xl:w-2/3 flex flex-col items-center gap-6">
+                {/* --- ZMĚNA ZDE: Oddělovač pro změnu velikosti --- */}
+                <div
+                    className="w-2 flex-shrink-0 cursor-col-resize bg-gray-700 hover:bg-yellow-400 transition-colors duration-200"
+                    onMouseDown={handleMouseDown}
+                />
+
+                <div className="flex-grow flex-1 flex flex-col items-center gap-6 p-6 rounded-r-2xl border-r border-t border-b border-gray-700">
                     <div ref={cardPreviewRef} className="w-full flex justify-center">
                          <CardPreview cardData={cardData} template={selectedTemplate} />
                     </div>
@@ -239,6 +329,7 @@ const App: React.FC = () => {
                     templates={templates}
                     onSave={handleSaveTemplates}
                     onClose={() => setTemplateEditorOpen(false)}
+                    currentUserId={currentUserId}
                 />
             )}
 

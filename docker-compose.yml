@@ -1,17 +1,28 @@
-# docker-compose.yml
-version: '3.8'
-
+# Moderní syntaxe Docker Compose, klíč 'version' již není nutný.
 services:
+  # Název naší služby
   app:
-    build: .
+    # Použije image, který byl vytvořen skriptem build.sh
+    image: mtg-card-creator:latest
+    # Vždy se pokusí restartovat kontejner, pokud se neočekávaně zastaví.
+    restart: unless-stopped
+    # Pojmenujeme kontejner pro snadnější správu.
+    container_name: mtg-card-creator
+    # Načte proměnné ze souboru .env v kořenovém adresáři.
+    env_file:
+      - .env
     ports:
-      - "80:3001"
-    environment:
-      - JWT_SECRET=mojeSuperTajneHesloProTokeny12345
-      - GEMINI_API_KEY=zde-vlozte-vas-realny-gemini-api-klic
+      # Mapuje port z proměnné APP_PORT v .env souboru na port 3001 v kontejneru.
+      # Aplikace tak bude dostupná např. na http://localhost:8080
+      - "${APP_PORT}:3001"
     volumes:
+      # Mapuje lokální složku pro nahrané soubory, aby zůstaly zachovány.
       - ./server/uploads:/app/uploads
-      - ./server-db:/app/database # <-- ZMĚNA ZDE: Vytvoříme složku pro databázi
+      # Používá Dockerem spravovaný "pojmenovaný volume" pro databázi.
+      # To je robustnější a výkonnější než přímé mapování složky (bind mount).
+      - server-db:/app/database
 
+# Deklarace pojmenovaného volume, který jsme použili výše.
+# Docker se postará o jeho vytvoření a správu.
 volumes:
-  server-db: {}
+  server-db:
