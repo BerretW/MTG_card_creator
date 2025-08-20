@@ -1,0 +1,18 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "80:3001" # Mapujte port 80 na hostiteli na port 3001 v kontejneru
+    environment:
+      # DŮLEŽITÉ: Tyto hodnoty si nastavte podle sebe!
+      - JWT_SECRET=mojeSuperTajneHesloProTokeny12345
+      - GEMINI_API_KEY=vas_gemini_api_klic # Tento klíč bude nyní bezpečně na serveru
+    volumes:
+      - ./server/uploads:/app/uploads # Udržuje nahrané soubory i po restartu kontejneru
+      - ./server-db:/app # Udržuje databázi i po restartu kontejneru
+
+volumes:
+  server-db:

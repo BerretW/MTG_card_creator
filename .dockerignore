@@ -1,0 +1,7 @@
+# .dockerignore
+node_modules
+npm-debug.log
+.env
+client/node_modules
+server/node_modules
+db.sqlite
