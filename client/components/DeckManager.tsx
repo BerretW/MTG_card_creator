@@ -3,8 +3,44 @@ import ReactDOM from 'react-dom/client';
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
 import { assetService } from '../services/assetService';
-import { Deck, SavedCard } from '../types';
+import { Deck, SavedCard, CardData, Template } from '../types';
 import CardPreview from './CardPreview';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// --- POMOCNÉ FUNKCE PRO PDF ---
+const CARD_WIDTH_MM = 63;
+const CARD_HEIGHT_MM = 88;
+
+const drawCropMarks = (doc: jsPDF, x: number, y: number, width: number, height: number) => {
+    const len = 4; // Délka značky v mm
+    const off = 1; // Odsazení značky od rohu v mm
+    doc.setLineWidth(0.1);
+    doc.setDrawColor(0);
+
+    // Horní levý roh
+    doc.line(x - off, y, x - off - len, y);
+    doc.line(x, y - off, x, y - off - len);
+    // Horní pravý roh
+    doc.line(x + width + off, y, x + width + off + len, y);
+    doc.line(x + width, y - off, x + width, y - off - len);
+    // Dolní levý roh
+    doc.line(x - off, y + height, x - off - len, y + height);
+    doc.line(x, y + height + off, x, y + height + off + len);
+    // Dolní pravý roh
+    doc.line(x + width + off, y, x + width + off + len, y);
+    doc.line(x + width, y + height + off, x + width, y + height + off + len);
+};
+
+// Funkce, která vrátí URL přes naši proxy, pokud je to externí zdroj
+const getProxiedUrl = (url: string): string => {
+    if (url && url.startsWith('http') && !url.startsWith(window.location.origin) && !url.startsWith(API_URL)) {
+        return `${API_URL}/api/image-proxy?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+};
+// ------------------------------
+
 
 interface DeckManagerProps {
     onClose: () => void;
@@ -18,7 +54,6 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     const [viewingCard, setViewingCard] = useState<SavedCard | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState('');
-
 
     const fetchDecks = useCallback(() => {
         setIsLoading(true);
@@ -75,77 +110,75 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     };
 
     const handleExportDeckToPdf = async () => {
-        if (!selectedDeck?.cards || selectedDeck.cards.length === 0) return;
+        const cardsToExport = selectedDeck?.cards;
+        if (!cardsToExport || cardsToExport.length === 0) return;
+        
         setIsExporting(true);
-        setExportProgress("Inicializace...");
-
-
+        
         const pdf = new jsPDF('p', 'mm', 'a4');
         const CARDS_PER_PAGE = 9;
-        const cardChunks = [];
-
-        for (let i = 0; i < selectedDeck.cards.length; i += CARDS_PER_PAGE) {
-            cardChunks.push(selectedDeck.cards.slice(i, i + CARDS_PER_PAGE));
-        }
-
-        // Vytvoříme dočasný skrytý kontejner pro renderování
+        const A4_WIDTH_MM = 210;
+        const A4_HEIGHT_MM = 297;
+        const gridWidth = 3 * CARD_WIDTH_MM;
+        const gridHeight = 3 * CARD_HEIGHT_MM;
+        const marginX = (A4_WIDTH_MM - gridWidth) / 2;
+        const marginY = (A4_HEIGHT_MM - gridHeight) / 2;
+        
         const printContainer = document.createElement('div');
         printContainer.style.position = 'absolute';
         printContainer.style.left = '-9999px';
         printContainer.style.top = '0';
         document.body.appendChild(printContainer);
+        const root = ReactDOM.createRoot(printContainer);
 
         try {
-            for (let i = 0; i < cardChunks.length; i++) {
-                const chunk = cardChunks[i];
-                setExportProgress(`Zpracovávám stránku ${i + 1}/${cardChunks.length}...`);
-                
-                // Vytvoříme grid pro aktuální stránku
-                const pageGrid = document.createElement('div');
-                pageGrid.style.display = 'grid';
-                pageGrid.style.gridTemplateColumns = 'repeat(3, 1fr)';
-                pageGrid.style.gap = '5px';
-                pageGrid.style.padding = '5px';
-                pageGrid.style.backgroundColor = 'white';
-                pageGrid.style.width = `${375 * 3 + 20}px`; // Šířka 3 karet + mezery
-                printContainer.appendChild(pageGrid);
+            for (let i = 0; i < cardsToExport.length; i++) {
+                setExportProgress(`Zpracovávám kartu ${i + 1}/${cardsToExport.length}...`);
+                const savedCard = cardsToExport[i];
 
-                const root = ReactDOM.createRoot(pageGrid);
+                // Vytvoříme kopie dat a proženeme URL přes proxy
+                const proxiedCardData: CardData = {
+                    ...savedCard.card_data,
+                    art: {
+                        original: getProxiedUrl(savedCard.card_data.art.original),
+                        cropped: getProxiedUrl(savedCard.card_data.art.cropped),
+                    },
+                    setSymbolUrl: getProxiedUrl(savedCard.card_data.setSymbolUrl),
+                };
+                const proxiedTemplateData: Template = {
+                    ...savedCard.template_data,
+                    frameImageUrl: getProxiedUrl(savedCard.template_data.frameImageUrl),
+                };
+
+                // Vykreslíme JEDNU kartu s proxovanými daty
                 await new Promise<void>(resolve => {
                     root.render(
-                        <React.StrictMode>
-                             {chunk.map(savedCard => (
-                                <CardPreview 
-                                    key={savedCard.id}
-                                    cardData={savedCard.card_data} 
-                                    template={savedCard.template_data} 
-                                />
-                            ))}
-                        </React.StrictMode>,
-                        () => resolve()
+                        <CardPreview cardData={proxiedCardData} template={proxiedTemplateData} />
                     );
-                });
-
-                // Dáme malou pauzu, aby se obrázky a fonty stihly načíst a vykreslit
-                await new Promise(r => setTimeout(r, 1000)); 
-
-                // *** OPRAVA ZDE: Přidán parametr cacheBust: true ***
-                const dataUrl = await toPng(pageGrid, { 
-                    pixelRatio: 2,
-                    cacheBust: true, // Tento řádek řeší problémy s CORS u obrázků
+                    requestAnimationFrame(() => resolve());
                 });
                 
-                if (i > 0) {
+                // Vygenerujeme obrázek této jedné karty
+                const cardDataUrl = await toPng(printContainer.firstElementChild as HTMLElement, {
+                    pixelRatio: 3, // Vyšší kvalita pro tisk
+                    quality: 1.0,
+                });
+
+                // Zjistíme, jestli máme přidat novou stránku
+                const cardIndexOnPage = i % CARDS_PER_PAGE;
+                if (i > 0 && cardIndexOnPage === 0) {
                     pdf.addPage();
                 }
 
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-                // Uklidíme po sobě
-                root.unmount();
-                printContainer.removeChild(pageGrid);
+                // Vypočítáme pozici karty na stránce
+                const row = Math.floor(cardIndexOnPage / 3);
+                const col = cardIndexOnPage % 3;
+                const x = marginX + col * CARD_WIDTH_MM;
+                const y = marginY + row * CARD_HEIGHT_MM;
+                
+                // Přidáme obrázek a ořezové značky do PDF
+                pdf.addImage(cardDataUrl, 'PNG', x, y, CARD_WIDTH_MM, CARD_HEIGHT_MM);
+                drawCropMarks(pdf, x, y, CARD_WIDTH_MM, CARD_HEIGHT_MM);
             }
             
             setExportProgress("Ukládání PDF...");
@@ -153,14 +186,15 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
 
         } catch (error) {
             console.error("Chyba při generování PDF:", error);
-            alert("Během exportu do PDF došlo k chybě. Zkuste to prosím znovu.");
+            alert("Během exportu do PDF došlo k chybě. Více informací naleznete v konzoli.");
         } finally {
-            // Finální úklid
+            root.unmount();
             document.body.removeChild(printContainer);
             setIsExporting(false);
-            setExportProgress("");
+            setExportProgress('');
         }
     };
+
 
     return (
         <>

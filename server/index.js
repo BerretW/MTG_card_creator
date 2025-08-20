@@ -7,6 +7,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./database.js');
+const axios = require('axios'); // << DŮLEŽITÉ: Přidáno pro proxy
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -79,6 +80,29 @@ const parseTemplateFromDB = (row) => {
 
 // --- API Routes ---
 
+// *** NOVÁ PROXY ROUTE PRO OBRÁZKY ***
+app.get('/api/image-proxy', async (req, res) => {
+    try {
+        const imageUrl = req.query.url;
+        if (!imageUrl) {
+            return res.status(400).send('Image URL is required');
+        }
+        const decodedUrl = decodeURIComponent(imageUrl);
+        
+        const response = await axios.get(decodedUrl, {
+            responseType: 'arraybuffer'
+        });
+
+        res.setHeader('Content-Type', response.headers['content-type']);
+        res.send(response.data);
+
+    } catch (error) {
+        console.error("Error in image proxy:", error.message);
+        res.status(502).send('Failed to fetch image from external source');
+    }
+});
+
+
 // AUTH
 app.post('/api/auth/register', (req, res) => {
     const { username, password } = req.body;
@@ -139,8 +163,6 @@ app.post('/api/assets', authenticateToken, upload.single('art'), (req, res) => {
 
 
 // TEMPLATES (CRUD)
-
-// --- ZMĚNA ZDE: Používáme pomocnou funkci pro správné parsování ---
 app.get('/api/templates', authenticateToken, (req, res) => {
     db.all('SELECT * FROM templates WHERE user_id = ?', [req.user.id], (err, rows) => {
         if (err) {
@@ -157,7 +179,6 @@ app.get('/api/templates', authenticateToken, (req, res) => {
     });
 });
 
-// --- ZMĚNA ZDE: Ukládáme všechny nové vlastnosti ---
 app.post('/api/templates', authenticateToken, (req, res) => {
     const { 
         name, frameImageUrl, elements, fonts,
@@ -190,7 +211,6 @@ app.post('/api/templates', authenticateToken, (req, res) => {
     });
 });
 
-// --- ZMĚNA ZDE: Aktualizujeme všechny nové vlastnosti ---
 app.put('/api/templates/:id', authenticateToken, (req, res) => {
     const { 
         name, frameImageUrl, elements, fonts,
@@ -228,9 +248,6 @@ app.put('/api/templates/:id', authenticateToken, (req, res) => {
     });
 });
 
-// Zbytek souboru zůstává stejný...
-
-// DELETE a template
 app.delete('/api/templates/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const sql = `DELETE FROM templates WHERE id = ? AND user_id = ?`;
@@ -248,7 +265,7 @@ app.delete('/api/templates/:id', authenticateToken, (req, res) => {
 });
 
 
-// GET VŠECHNY BALÍČKY UŽIVATELE
+// DECKS
 app.get('/api/decks', authenticateToken, (req, res) => {
     const sql = "SELECT * FROM decks WHERE user_id = ? ORDER BY created_at DESC";
     db.all(sql, [req.user.id], (err, rows) => {
@@ -257,7 +274,6 @@ app.get('/api/decks', authenticateToken, (req, res) => {
     });
 });
 
-// VYTVOŘENÍ NOVÉHO BALÍČKU
 app.post('/api/decks', authenticateToken, (req, res) => {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ message: "Název balíčku je povinný." });
@@ -269,7 +285,6 @@ app.post('/api/decks', authenticateToken, (req, res) => {
     });
 });
 
-// ZÍSKÁNÍ JEDNOHO BALÍČKU VČETNĚ KARET
 app.get('/api/decks/:id', authenticateToken, (req, res) => {
     const deckSql = "SELECT * FROM decks WHERE id = ? AND user_id = ?";
     db.get(deckSql, [req.params.id, req.user.id], (err, deck) => {
@@ -291,7 +306,6 @@ app.get('/api/decks/:id', authenticateToken, (req, res) => {
     });
 });
 
-// SMAZÁNÍ BALÍČKU
 app.delete('/api/decks/:id', authenticateToken, (req, res) => {
     const sql = "DELETE FROM decks WHERE id = ? AND user_id = ?";
     db.run(sql, [req.params.id, req.user.id], function(err) {
@@ -301,7 +315,8 @@ app.delete('/api/decks/:id', authenticateToken, (req, res) => {
     });
 });
 
-// PŘIDÁNÍ KARTY DO BALÍČKU
+
+// DECK CARDS
 app.post('/api/decks/:id/cards', authenticateToken, (req, res) => {
     const { card_data, template_data } = req.body;
     if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
@@ -313,7 +328,6 @@ app.post('/api/decks/:id/cards', authenticateToken, (req, res) => {
     });
 });
 
-// ODSTRANĚNÍ KARTY Z BALÍČKU
 app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
     const sql = "DELETE FROM deck_cards WHERE id = ? AND deck_id = ?";
     db.run(sql, [req.params.cardId, req.params.deckId], function(err) {
@@ -323,7 +337,6 @@ app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => 
     });
 });
 
-// AKTUALIZACE KONKRÉTNÍ KARTY V BALÍČKU
 app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
     const { card_data, template_data } = req.body;
     if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
