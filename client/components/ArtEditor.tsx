@@ -3,6 +3,7 @@ import { generateArt } from '../services/geminiService';
 import ArtCropper from './ArtCropper';
 import AssetLibrary from './AssetLibrary';
 import { ArtAsset, CardArt } from '../types'; // Přidáme CardArt
+import imageCompression from 'browser-image-compression'; // Import
 
 interface ArtEditorProps {
     art: CardArt; // << ZMĚNA
@@ -11,42 +12,6 @@ interface ArtEditorProps {
     onArtUpdate: (originalUrl: string, croppedUrl: string) => void; // << ZMĚNA
     aspectRatio: number;
 }
-
-interface AIModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onGenerate: (prompt: string) => void; // Added callback prop
-    isLoading: boolean;
-    error: string | null;
-}
-
-const AIModal: React.FC<AIModalProps> = ({ isOpen, onClose, onGenerate, isLoading, error }) => {
-    const [prompt, setPrompt] = useState('');
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 flex flex-col">
-                <h3 className="text-xl font-beleren text-yellow-300 mb-4">Generovat obrázek pomocí AI</h3>
-                {error && <p className="text-red-500">{error}</p>}
-                <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    className="w-full bg-gray-700 p-2 rounded border border-gray-600 text-white mb-4"
-                    placeholder="Zadejte popis obrázku..."
-                    rows={4}
-                />
-                <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500">Zrušit</button>
-                    <button onClick={() => onGenerate(prompt)} disabled={isLoading} className="py-2 px-6 rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500">
-                        {isLoading ? 'Generuji...' : 'Generovat'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 
 const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpdate, aspectRatio }) => {
@@ -58,14 +23,26 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                setCroppingImageUrl(e.target?.result as string);
-            };
-            reader.readAsDataURL(file);
+            const options = {
+                maxSizeMB: 0.5,
+                maxWidthOrHeight: 800,
+                useWebWorker: true
+            }
+            try {
+                const compressedFile = await imageCompression(file, options);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    setCroppingImageUrl(e.target?.result as string);
+                };
+                reader.readAsDataURL(compressedFile);
+            } catch (error) {
+                console.error("Error compressing image:", error);
+                // Handle error appropriately
+            }
+
         }
     };
     
@@ -139,16 +116,8 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
                     onClose={() => setIsLibraryOpen(false)}
                 />
             )}
+
             
-             {isAiModalOpen && (
-                <AIModal
-                    isOpen={isAiModalOpen}
-                    onClose={() => setIsAiModalOpen(false)}
-                    onGenerate={handleGenerateArt}
-                    isLoading={isLoading}
-                    error={error}
-                />
-            )}
         </>
     );
 };
