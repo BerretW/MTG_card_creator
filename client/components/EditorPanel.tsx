@@ -1,6 +1,5 @@
-
 import React, { useRef } from 'react';
-import { CardData, CardType, Rarity, Template, ArtAsset, CustomSetSymbol } from '../types';
+import { CardData, CardType, Rarity, Template, ArtAsset, CustomSetSymbol, CardArt } from '../types';
 import { SET_SYMBOLS } from '../constants';
 import ArtEditor from './ArtEditor';
 
@@ -10,20 +9,21 @@ interface EditorPanelProps {
     templates: Template[];
     onOpenTemplateEditor: () => void;
     artAssets: ArtAsset[];
-    onAddArtAsset: (dataUrl: string) => void;
+    onArtUpdate: (originalUrl: string, croppedUrl: string) => void; // Změněno
     customSetSymbols: CustomSetSymbol[];
     onAddCustomSetSymbol: (name: string, dataUrl: string) => void;
     template: Template;
 }
 
 const EditorPanel: React.FC<EditorPanelProps> = (props) => {
-    const { cardData, setCardData, templates, onOpenTemplateEditor, artAssets, onAddArtAsset, customSetSymbols, onAddCustomSetSymbol, template } = props;
+    const { cardData, setCardData, templates, onOpenTemplateEditor, artAssets, onArtUpdate, customSetSymbols, onAddCustomSetSymbol, template } = props;
     const customSymbolInputRef = useRef<HTMLInputElement>(null);
 
     const handleChange = <K extends keyof CardData,>(key: K, value: CardData[K]) => {
         setCardData(prev => ({ ...prev, [key]: value }));
     };
     
+    // ... handleCustomSymbolUpload a definice allSetSymbols jsou v pořádku ...
     const handleCustomSymbolUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
@@ -36,7 +36,6 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
                 reader.readAsDataURL(file);
             }
         }
-        // Reset the input value to allow uploading the same file again
         if(event.target) event.target.value = '';
     };
 
@@ -54,13 +53,15 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
                 <Input label="Mana Cost" value={cardData.manaCost} onChange={e => handleChange('manaCost', e.target.value)} placeholder="{2}{W}{U}" />
             </div>
 
+            {/* --- TATO ČÁST JE OPRAVENA --- */}
             <ArtEditor 
-                artUrl={cardData.artUrl} 
-                setArtUrl={(url) => handleChange('artUrl', url)} 
+                art={cardData.art}
+                setArt={(art: CardArt) => handleChange('art', art)}
                 artAssets={artAssets}
-                onArtFinalized={onAddArtAsset}
+                onArtUpdate={onArtUpdate}
                 aspectRatio={template.elements.art.width / template.elements.art.height}
             />
+            {/* --- KONEC OPRAVENÉ ČÁSTI --- */}
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Select label="Card Type" value={cardData.cardType} onChange={e => handleChange('cardType', e.target.value as CardType)}>
@@ -79,6 +80,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
                 </div>
             )}
             
+            {/* ... zbytek souboru je v pořádku ... */}
             <Select label="Rarity" value={cardData.rarity} onChange={e => handleChange('rarity', e.target.value as Rarity)}>
                 {Object.values(Rarity).map(rarity => <option key={rarity} value={rarity}>{rarity}</option>)}
             </Select>
@@ -115,28 +117,9 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
         </div>
     );
 };
-
-const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props }) => (
-    <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
-        <input {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition" />
-    </div>
-);
-
-const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }> = ({ label, ...props }) => (
-     <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
-        <textarea {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition" />
-    </div>
-);
-
-const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }> = ({ label, children, ...props }) => (
-    <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
-        <select {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition">
-            {children}
-        </select>
-    </div>
-);
+// Pomocné komponenty Input, Textarea, Select zůstávají stejné
+const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props }) => (<div><label className="block text-sm font-medium text-gray-300 mb-1">{label}</label><input {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition" /></div>);
+const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }> = ({ label, ...props }) => (<div><label className="block text-sm font-medium text-gray-300 mb-1">{label}</label><textarea {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition" /></div>);
+const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }> = ({ label, children, ...props }) => (<div><label className="block text-sm font-medium text-gray-300 mb-1">{label}</label><select {...props} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition">{children}</select></div>);
 
 export default EditorPanel;

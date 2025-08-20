@@ -1,6 +1,15 @@
 // server/database.js
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const DB_SOURCE = "db.sqlite";
+
+
+
+// Zajistíme, aby složka existovala
+const dbFolder = path.join(__dirname, 'database');
+if (!require('fs').existsSync(dbFolder)) {
+    require('fs').mkdirSync(dbFolder);
+}
+const DB_SOURCE = path.join(dbFolder, "db.sqlite"); // << ZMĚNA ZDE
 
 const db = new sqlite3.Database(DB_SOURCE, (err) => {
     if (err) {

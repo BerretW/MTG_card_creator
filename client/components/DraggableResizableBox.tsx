@@ -82,6 +82,7 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
         border: isSelected ? '2px solid #facc15' : '1px dashed rgba(255, 255, 255, 0.5)',
         cursor: action === 'move' ? 'grabbing' : 'grab',
         transition: action ? 'none' : 'border-color 0.2s',
+        zIndex: 2, // << PŘIDAT TENTO ŘÁDEK
     };
 
     const handleStyle: React.CSSProperties = {
