@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CardData, CardType, Rarity, Template } from '../types';
 import ManaSymbol from './ManaSymbol';
@@ -11,10 +10,11 @@ interface CardPreviewProps {
 
 const parseTextWithSymbols = (text: string) => {
     if (!text) return null;
+    // Regulární výraz, který najde text ve složených závorkách, např. {T} nebo {2}
     const parts = text.split(/(\{[^}]+\})/g);
     return parts.map((part, index) => {
-        const symbol = part.replace(/[{}]/g, '');
         if (part.startsWith('{') && part.endsWith('}')) {
+            const symbol = part.replace(/[{}]/g, '');
             return <ManaSymbol key={index} symbol={symbol} className="h-4 w-4 inline-block align-text-bottom mx-px" />;
         }
         return <span key={index}>{part}</span>;
@@ -23,11 +23,11 @@ const parseTextWithSymbols = (text: string) => {
 
 const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
     if (!template) {
-        return <div className="w-[375px] h-[525px] bg-red-500 text-white flex items-center justify-center">Template not found!</div>;
+        return <div className="w-[375px] h-[525px] bg-red-500 text-white flex items-center justify-center">Šablona nebyla nalezena!</div>;
     }
 
     const {
-        name, manaCost, artUrl, cardType, subtype,
+        name, manaCost, art, cardType, subtype,
         rulesText, flavorText, power, toughness,
         rarity, artist, collectorNumber, setSymbolUrl
     } = cardData;
@@ -37,7 +37,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
     const rarityColor = RARITY_COLORS[rarity];
     const parsedCost = manaCost.replace(/\{/g, ' ').replace(/\}/g, ' ').trim().split(/\s+/);
 
-    const getElementStyle = (el: keyof Template['elements']): React.CSSProperties => ({
+    const getElementStyle = (el: keyof Template['elements'], zIndex: number = 2): React.CSSProperties => ({
         position: 'absolute',
         left: `${elements[el].x}%`,
         top: `${elements[el].y}%`,
@@ -45,6 +45,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
         height: `${elements[el].height}%`,
         display: 'flex',
         alignItems: 'center',
+        zIndex, // Přidáváme z-index pro správné vrstvení
     });
 
     const getFontStyle = (font: keyof Template['fonts']): React.CSSProperties => ({
@@ -61,35 +62,38 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
 
     return (
         <div 
-            className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black bg-cover bg-center"
-            style={{ backgroundImage: `url(${frameImageUrl})`}}
+            className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black"
         >
-            {/* Art Box */}
-            <div style={{...getElementStyle('art'), overflow: 'hidden'}}>
-                <img src={artUrl} alt="Card Art" className="w-full h-full object-cover" />
+            {/* Vrstva 0: Art (úplně vespod) */}
+            <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
+                <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
             </div>
 
-            {/* Title */}
+            {/* Vrstva 1: Rámeček karty (nad artem) - musí být PNG s průhledností */}
+            <img 
+                src={frameImageUrl} 
+                alt="Card Frame" 
+                className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+                style={{ zIndex: 1 }}
+            />
+
+            {/* Vrstva 2: Všechny textové a UI elementy (úplně nahoře) */}
             <div style={getElementStyle('title')}>
                 <p style={getFontStyle('title')}>{name}</p>
             </div>
             
-            {/* Mana Cost */}
             <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: '2px'}}>
                 {parsedCost.map((symbol, index) => symbol && <ManaSymbol key={index} symbol={symbol} className="h-6 w-6" />)}
             </div>
 
-            {/* Type Line */}
             <div style={getElementStyle('typeLine')}>
                 <p style={getFontStyle('typeLine')}>{cardType}{subtype && ` — ${subtype}`}</p>
             </div>
 
-            {/* Set Symbol */}
             <div style={{ ...getElementStyle('setSymbol'), justifyContent: 'center' }}>
                 <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
             </div>
 
-            {/* Text Box */}
             <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: '5px' }}>
                 <div style={getFontStyle('rulesText')}>
                     {rulesText.split('\n').map((line, i) => <p key={i}>{parseTextWithSymbols(line)}</p>)}
@@ -101,19 +105,16 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template }) => {
                 )}
             </div>
 
-            {/* P/T Box */}
             {isCreature && (
                 <div style={{...getElementStyle('ptBox'), justifyContent: 'center' }}>
                     <span style={getFontStyle('pt')}>{power} / {toughness}</span>
                 </div>
             )}
 
-            {/* Collector Number */}
             <div style={getElementStyle('collectorNumber')}>
                  <span style={getFontStyle('collectorNumber')}>{collectorNumber}</span>
             </div>
 
-            {/* Artist */}
             <div style={getElementStyle('artist')}>
                  <span style={getFontStyle('artist')}>Illus. {artist}</span>
             </div>

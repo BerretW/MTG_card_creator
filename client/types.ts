@@ -16,10 +16,17 @@ export enum Rarity {
     Mythic = "Mythic",
 }
 
+
+export interface CardArt {
+    original: string; // URL na původní, ne-oříznutý obrázek
+    cropped: string;  // URL na oříznutou verzi pro zobrazení
+}
+
+
 export interface CardData {
     name: string;
     manaCost: string;
-    artUrl: string;
+    art: CardArt;
     cardType: CardType;
     subtype: string;
     rulesText: string;

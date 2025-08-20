@@ -1,31 +1,30 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { toPng } from 'html-to-image';
-import { CardData, Template, ArtAsset, CustomSetSymbol } from './types';
+import { CardData, Template, ArtAsset, CustomSetSymbol, CardArt } from './types';
 import EditorPanel from './components/EditorPanel';
 import CardPreview from './components/CardPreview';
 import TemplateEditor from './components/TemplateEditor';
-import Auth from './components/Auth'; // Import nové komponenty
+import Auth from './components/Auth';
 import { DEFAULT_CARD_DATA, DEFAULT_TEMPLATES } from './constants';
 import { assetService } from './services/assetService';
 
 const App: React.FC = () => {
-    // --- Nová část pro autentizaci ---
+    // --- Autentizace ---
     const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
 
-    // --- Původní stavy aplikace ---
+    // --- Stavy aplikace ---
     const [cardData, setCardData] = useState<CardData>(DEFAULT_CARD_DATA);
     const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES);
     const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
     const [artAssets, setArtAssets] = useState<ArtAsset[]>([]);
     const [customSetSymbols, setCustomSetSymbols] = useState<CustomSetSymbol[]>([]);
-    const [isLoading, setIsLoading] = useState(true); // Stav pro načítání dat po přihlášení
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const cardPreviewRef = useRef<HTMLDivElement>(null);
     
-    // Efekt se spustí při změně tokenu (přihlášení/odhlášení)
+    // Načítání dat po přihlášení (změně tokenu)
     useEffect(() => {
-        // Pokud není token, nic nenačítáme
         if (!token) {
             setIsLoading(false);
             return;
@@ -35,7 +34,6 @@ const App: React.FC = () => {
             setIsLoading(true);
             setError(null);
             try {
-                // Načítání dat ze serveru (vyžaduje token)
                 const [loadedAssets, loadedSymbols] = await Promise.all([
                     assetService.getArtAssets(),
                     assetService.getCustomSetSymbols()
@@ -45,8 +43,7 @@ const App: React.FC = () => {
             } catch (err: any) {
                 console.error("Failed to load user data:", err);
                 setError("Nepodařilo se načíst data. Váš token mohl vypršet.");
-                // Pokud token nefunguje, odhlásíme uživatele
-                handleLogout();
+                handleLogout(); // Odhlásíme uživatele při chybě
             } finally {
                 setIsLoading(false);
             }
@@ -55,7 +52,7 @@ const App: React.FC = () => {
         loadData();
     }, [token]);
 
-    // --- Nové funkce pro správu sezení ---
+    // --- Správa sezení ---
     const handleLoginSuccess = (newToken: string) => {
         localStorage.setItem('accessToken', newToken);
         setToken(newToken);
@@ -64,20 +61,30 @@ const App: React.FC = () => {
     const handleLogout = () => {
         localStorage.removeItem('accessToken');
         setToken(null);
-        // Resetujeme stav aplikace po odhlášení
         setArtAssets([]);
         setCustomSetSymbols([]);
     };
 
-    // --- Upravené funkce pro práci s daty na serveru ---
-    const handleAddArtAsset = async (dataUrl: string) => {
-        try {
-            const newAsset = await assetService.addArtAsset(dataUrl);
-            setArtAssets(prev => [newAsset, ...prev]);
-        } catch (error) {
-            console.error("Failed to add art asset:", error);
-            alert("Chyba: Nepodařilo se nahrát obrázek na server.");
-        }
+    // --- Handlery pro data ---
+    const handleArtUpdate = (originalUrl: string, croppedUrl: string) => {
+        // 1. Aktualizujeme stav karty v reálném čase
+        setCardData(prev => ({
+            ...prev,
+            art: {
+                original: originalUrl,
+                cropped: croppedUrl
+            }
+        }));
+
+        // 2. Oříznutou verzi uložíme do knihovny na serveru
+        assetService.addArtAsset(croppedUrl)
+            .then(newAsset => {
+                setArtAssets(prev => [newAsset, ...prev]);
+            })
+            .catch(error => {
+                console.error("Failed to add art asset to library:", error);
+                alert("Chyba: Nepodařilo se nahrát obrázek do knihovny na serveru.");
+            });
     };
 
     const handleAddCustomSetSymbol = async (name: string, dataUrl: string) => {
@@ -86,13 +93,12 @@ const App: React.FC = () => {
         setCardData(prev => ({ ...prev, setSymbolUrl: newSymbol.url }));
     };
 
-    // --- Původní funkce (beze změny) ---
     const handleDownload = useCallback(() => {
         if (cardPreviewRef.current === null) return;
         toPng(cardPreviewRef.current, { cacheBust: true, pixelRatio: 2, quality: 1.0 })
             .then((dataUrl) => {
-                const link = document.createElement('a');
                 const safeCardName = cardData.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'mtg_card';
+                const link = document.createElement('a');
                 link.download = `${safeCardName}.png`;
                 link.href = dataUrl;
                 link.click();
@@ -112,22 +118,18 @@ const App: React.FC = () => {
     const selectedTemplate = templates.find(t => t.id === cardData.templateId) || templates[0];
     
     // --- Podmíněné renderování ---
-    // Pokud není uživatel přihlášen, zobrazíme Auth komponentu
     if (!token) {
         return <Auth onLoginSuccess={handleLoginSuccess} />;
     }
     
-    // Zobrazení načítací obrazovky po přihlášení
     if (isLoading) {
         return <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-beleren text-2xl">Načítání...</div>;
     }
     
-    // Zobrazení chybové zprávy
     if (error) {
         return <div className="min-h-screen bg-gray-900 text-red-500 flex items-center justify-center text-xl">{error}</div>;
     }
 
-    // Pokud je přihlášen, zobrazíme hlavní aplikaci
     return (
         <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans relative">
             <button
@@ -150,7 +152,7 @@ const App: React.FC = () => {
                         templates={templates}
                         onOpenTemplateEditor={() => setTemplateEditorOpen(true)}
                         artAssets={artAssets}
-                        onAddArtAsset={handleAddArtAsset}
+                        onArtUpdate={handleArtUpdate}
                         customSetSymbols={customSetSymbols}
                         onAddCustomSetSymbol={handleAddCustomSetSymbol}
                         template={selectedTemplate}

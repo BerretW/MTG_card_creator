@@ -69,7 +69,10 @@ export const DEFAULT_TEMPLATES: Template[] = [
 export const DEFAULT_CARD_DATA: CardData = {
     name: "AI Artificer",
     manaCost: "{2}{U}{U}",
-    artUrl: "https://picsum.photos/seed/aiartificer/320/230",
+    art: { // << ZMĚNA ZDE
+        original: "https://picsum.photos/seed/aiartificer/800/600", // Větší rozlišení pro ořez
+        cropped: "https://picsum.photos/seed/aiartificer/320/230",
+    },
     cardType: CardType.Creature,
     subtype: "Human Artificer",
     rulesText: "When AI Artificer enters the battlefield, you may create a 1/1 colorless Thopter artifact creature token with flying.\n{T}: Add {C}.",
