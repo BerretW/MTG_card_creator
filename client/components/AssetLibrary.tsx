@@ -1,6 +1,6 @@
-
 import React from 'react';
 import { ArtAsset } from '../types';
+import { assetService } from '../services/assetService';
 
 interface AssetLibraryProps {
     assets: ArtAsset[];
@@ -9,6 +9,20 @@ interface AssetLibraryProps {
 }
 
 const AssetLibrary: React.FC<AssetLibraryProps> = ({ assets, onSelect, onClose }) => {
+    const handleDeleteAsset = async (assetId: number, event: React.MouseEvent) => {
+        event.stopPropagation(); // Zabraníme spuštění onClick na divu
+        if (window.confirm("Opravdu si přejete smazat tento obrázek?")) {
+            try {
+                await assetService.removeArtAsset(assetId);
+                // Zde můžeš provést aktualizaci stavu, aby se obrázek odstranil z UI
+                // Například, zavolat funkci, která je předána jako prop, a která aktualizuje `artAssets` v `ArtEditor`
+                window.location.reload() //TODO: Refaktorovat
+            } catch (error) {
+                alert("Chyba při mazání obrázku.");
+            }
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl h-[80vh] border border-gray-700 flex flex-col">
@@ -25,10 +39,18 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({ assets, onSelect, onClose }
                         {assets.map(asset => (
                             <div 
                                 key={asset.id} 
-                                className="aspect-square bg-gray-900 rounded-md overflow-hidden cursor-pointer transform hover:scale-105 transition-transform duration-200"
+                                className="relative aspect-square bg-gray-900 rounded-md overflow-hidden cursor-pointer transform hover:scale-105 transition-transform duration-200"
                                 onClick={() => onSelect(asset.dataUrl)}
                             >
                                 <img src={asset.dataUrl} alt={`Asset ${asset.id}`} className="w-full h-full object-cover" />
+                                <button 
+                                    onClick={(event) => handleDeleteAsset(asset.id, event)}
+                                    className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M6 2l2-2h4l2 2h4a1 1 0 011 1v1H5V3a1 1 0 011-1h4zm3 5l1 5h-2l1-5zm-4 0l1 5H4l1-5zm7 0l1 5h-2l1-5zm-5 3h2v4h-2V10zM6 7v9a1 1 0 001 1h6a1 1 0 001-1V7H6z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
                             </div>
                         ))}
                     </div>

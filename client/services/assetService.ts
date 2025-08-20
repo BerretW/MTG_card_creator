@@ -180,4 +180,13 @@ export const assetService = {
         });
         if (!response.ok) throw new Error('Nepodařilo se aktualizovat kartu.');
     },
+
+    removeArtAsset: async (assetId: number): Promise<void> => {
+    const token = getAuthToken();
+    const response = await fetch(`${API_URL}/assets/${assetId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Nepodařilo se smazat obrázek.');
+},
 };

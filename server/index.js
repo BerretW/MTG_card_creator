@@ -374,7 +374,40 @@ app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
         });
     });
 });
+app.delete('/api/assets/:id', authenticateToken, (req, res) => {
+    const assetId = req.params.id;
 
+    // Nejprve získej cestu k souboru pro smazání
+    db.get('SELECT filename FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], (err, row) => {
+        if (err) {
+            console.error("Error při získávání názvu souboru:", err);
+            return res.status(500).json({ message: "Chyba při mazání obrázku." });
+        }
+        if (!row) {
+            return res.status(404).json({ message: "Obrázek nenalezen nebo nemáte oprávnění." });
+        }
+
+        const filename = row.filename;
+        const filePath = path.join(__dirname, 'uploads', filename);
+
+        // Smaž záznam z databáze
+        db.run('DELETE FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], function (err) {
+            if (err) {
+                console.error("Error při mazání z databáze:", err);
+                return res.status(500).json({ message: "Chyba při mazání obrázku z databáze." });
+            }
+
+            // Smaž soubor
+            fs.unlink(filePath, (unlinkErr) => {
+                if (unlinkErr) {
+                    console.error("Error při mazání souboru:", unlinkErr);
+                    // Logujeme chybu, ale nemažeme z databáze, aby nedošlo k nekonzistenci
+                }
+                res.status(200).json({ message: "Obrázek úspěšně smazán." });
+            });
+        });
+    });
+});
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
