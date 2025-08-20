@@ -35,18 +35,51 @@ const AVAILABLE_SYMBOLS: { key: string; label: string; preview: string }[] = [
   { key: "R/P", label: "Tap", preview: MANA_SYMBOLS["R/P"] },
   { key: "G/P", label: "Tap", preview: MANA_SYMBOLS["G/P"] },
   { key: "W/U", label: "White/Blue", preview: MANA_SYMBOLS["W/U"] },
-    { key: "W/B", label: "White/Black", preview: MANA_SYMBOLS["W/B"] },
-    { key: "R/W", label: "Red/White", preview: MANA_SYMBOLS["R/W"] },
-    { key: "G/W", label: "Green/White", preview: MANA_SYMBOLS["G/W"] },
-    { key: "U/B", label: "Blue/Black", preview: MANA_SYMBOLS["U/B"] },
-    { key: "U/R", label: "Blue/Red", preview: MANA_SYMBOLS["U/R"] },
-    { key: "G/U", label: "Green/Blue", preview: MANA_SYMBOLS["G/U"] },
-    { key: "B/R", label: "Black/Red", preview: MANA_SYMBOLS["B/R"] },
-    { key: "B/G", label: "Black/Green", preview: MANA_SYMBOLS["B/G"] },
-    { key: "R/G", label: "Red/Green", preview: MANA_SYMBOLS["R/G"] },
-
-
+  { key: "W/B", label: "White/Black", preview: MANA_SYMBOLS["W/B"] },
+  { key: "R/W", label: "Red/White", preview: MANA_SYMBOLS["R/W"] },
+  { key: "G/W", label: "Green/White", preview: MANA_SYMBOLS["G/W"] },
+  { key: "U/B", label: "Blue/Black", preview: MANA_SYMBOLS["U/B"] },
+  { key: "U/R", label: "Blue/Red", preview: MANA_SYMBOLS["U/R"] },
+  { key: "G/U", label: "Green/Blue", preview: MANA_SYMBOLS["G/U"] },
+  { key: "B/R", label: "Black/Red", preview: MANA_SYMBOLS["B/R"] },
+  { key: "B/G", label: "Black/Green", preview: MANA_SYMBOLS["B/G"] },
+  { key: "R/G", label: "Red/Green", preview: MANA_SYMBOLS["R/G"] },
 ];
+
+// někam nahoru k ostatním funkcím
+const copyToClipboard = async (text: string) => {
+  try {
+    if (
+      typeof navigator !== "undefined" &&
+      "clipboard" in navigator &&
+      window.isSecureContext
+    ) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // spadne? zkus fallback níže
+  }
+
+  // Fallback pro ne-HTTPS / starší prohlížeče
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    ta.setAttribute("readonly", "true");
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
 const EditorPanel: React.FC<EditorPanelProps> = (props) => {
   const {
     cardData,
@@ -117,14 +150,14 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       handleChange("rulesText", newValue);
 
       // posuň caret hned po vložení
-requestAnimationFrame(() => {
-  if (textarea) {
-    const pos = start + token.length;
-    textarea.focus();
-    textarea.setSelectionRange(pos, pos);
-    setCursorPosition(pos);
-  }
-});
+      requestAnimationFrame(() => {
+        if (textarea) {
+          const pos = start + token.length;
+          textarea.focus();
+          textarea.setSelectionRange(pos, pos);
+          setCursorPosition(pos);
+        }
+      });
     },
     [cardData.rulesText, cursorPosition, handleChange]
   );
@@ -138,7 +171,6 @@ requestAnimationFrame(() => {
   const handleTextareaScroll = (event: React.UIEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
   };
-
 
   return (
     <div className="space-y-4">
@@ -199,29 +231,27 @@ requestAnimationFrame(() => {
         ref={rulesTextRef}
         onWheel={handleTextareaScroll}
       />
-<div>
-  <label className="block text-sm font-medium text-gray-300 mb-1">
-    Symbols & Placeholders
-  </label>
-  <div className="grid grid-cols-6 gap-2">
-    {AVAILABLE_SYMBOLS.map((sym) => (
+<div className="grid grid-cols-6 gap-2">
+  {AVAILABLE_SYMBOLS.map((sym) => (
+    <div
+      key={sym.key}
+      title={`Click to copy: {${sym.key}}`}
+      onClick={async () => {
+        const ok = await copyToClipboard(`{${sym.key}}`);
+        // volitelné: mini feedback
+        if (!ok) alert("Nepodařilo se zkopírovat do schránky :(");
+      }}
+      className="w-[50px] h-[50px] bg-gray-700 hover:bg-gray-600 
+                 flex items-center justify-center rounded-md 
+                 cursor-pointer border border-gray-500"
+    >
       <div
-        key={sym.key}
-        title={`Click to copy: {${sym.key}}`}
-        onClick={() => {
-          navigator.clipboard.writeText(`{${sym.key}}`);
-        }}
-        className="w-[50px] h-[50px] bg-gray-700 hover:bg-gray-600 
-                   flex items-center justify-center rounded-md 
-                   cursor-pointer border border-gray-500"
-      >
-        <div
-          className="w-[32px] h-[32px] flex items-center justify-center"
-          dangerouslySetInnerHTML={{ __html: sym.preview }}
-        />
-      </div>
-    ))}
-  </div>
+        className="w-[32px] h-[32px] flex items-center justify-center"
+        // pokud je to SVG string:
+        dangerouslySetInnerHTML={{ __html: sym.preview }}
+      />
+    </div>
+  ))}
 </div>
 
       <Textarea
