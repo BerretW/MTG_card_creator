@@ -1,7 +1,4 @@
-// server/index.js
-// server/index.js
-require('dotenv').config(); // TENTO ŘÁDEK PŘIDEJTE NA ZAČÁTEK
-
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -10,35 +7,56 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./database.js');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key'; // V produkci nastavte přes proměnnou prostředí!
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 
-// Middleware
+// --- VÝCHOZÍ ŠABLONY (přesunuto z klienta pro vytváření nových účtů) ---
+// Poznámka: Base64 řetězce jsou zkráceny pro přehlednost. Použijte ty plné z vašeho `constants.ts`.
+const DEFAULT_TEMPLATES = [
+    {
+        name: 'Modern',
+        frameImageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAXcAAAKtCAIAAACVz9xeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABWSURBVHja7cExAQAAAMKg9U/tbwagAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4N2kMAAE2lADsAAAAAElFTkSuQmCC',
+        elements: {
+            title: { x: 5.5, y: 5, width: 55, height: 6 }, manaCost: { x: 62, y: 5, width: 32, height: 6 }, art: { x: 4.5, y: 12, width: 91, height: 46 }, typeLine: { x: 5.5, y: 59, width: 75, height: 6 }, setSymbol: { x: 84.5, y: 59.5, width: 10, height: 5 }, textBox: { x: 5.5, y: 66, width: 89, height: 26 }, ptBox: { x: 78, y: 88.5, width: 16, height: 6 }, collectorNumber: { x: 5, y: 94, width: 40, height: 3 }, artist: { x: 50, y: 94, width: 45, height: 3 },
+        },
+        fonts: {
+            title: { fontFamily: 'Beleren, sans-serif', fontSize: 18, color: '#000000', textAlign: 'left', fontWeight: 'bold' }, typeLine: { fontFamily: 'Beleren, sans-serif', fontSize: 16, color: '#000000', textAlign: 'left', fontWeight: 'bold' }, rulesText: { fontFamily: 'MPlantin, serif', fontSize: 15, color: '#000000', textAlign: 'left', fontWeight: 'normal' }, flavorText: { fontFamily: 'MPlantin, serif', fontSize: 14, color: '#000000', textAlign: 'left', fontStyle: 'italic', fontWeight: 'normal' }, pt: { fontFamily: 'Beleren, sans-serif', fontSize: 19, color: '#000000', textAlign: 'center', fontWeight: 'bold' }, collectorNumber: { fontFamily: 'MPlantin, serif', fontSize: 10, color: '#000000', textAlign: 'left', fontWeight: 'normal' }, artist: { fontFamily: 'Beleren, sans-serif', fontSize: 10, color: '#000000', textAlign: 'right', fontWeight: 'normal' },
+        }
+    },
+    {
+        name: 'Showcase',
+        frameImageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAXcAAAKtCAIAAACVz9xeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAB/SURBVHja7dJBAYAwEMDAwL9+aQ8eIIkd2bOzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB4os+a+pt0+AZ+fvgEAAAAAAAAAAAAAAAAA+GU9cW89gP8d/30A+G09aAB4mAAA+GgBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAb2y4AAZ1LPAkAAAAASUVORK5CYII=',
+        elements: {
+            title: { x: 5.5, y: 5, width: 55, height: 6 }, manaCost: { x: 62, y: 5, width: 32, height: 6 }, art: { x: 0, y: 0, width: 100, height: 65 }, typeLine: { x: 5.5, y: 59, width: 75, height: 6 }, setSymbol: { x: 84.5, y: 59.5, width: 10, height: 5 }, textBox: { x: 5.5, y: 66, width: 89, height: 26 }, ptBox: { x: 78, y: 88.5, width: 16, height: 6 }, collectorNumber: { x: 5, y: 94, width: 40, height: 3 }, artist: { x: 50, y: 94, width: 45, height: 3 },
+        },
+        fonts: {
+            title: { fontFamily: 'Beleren, sans-serif', fontSize: 18, color: '#FFFFFF', textAlign: 'left', fontWeight: 'bold' }, typeLine: { fontFamily: 'Beleren, sans-serif', fontSize: 16, color: '#FFFFFF', textAlign: 'left', fontWeight: 'bold' }, rulesText: { fontFamily: 'MPlantin, serif', fontSize: 15, color: '#FFFFFF', textAlign: 'left', fontWeight: 'normal' }, flavorText: { fontFamily: 'MPlantin, serif', fontSize: 14, color: '#FFFFFF', textAlign: 'left', fontStyle: 'italic', fontWeight: 'normal' }, pt: { fontFamily: 'Beleren, sans-serif', fontSize: 19, color: '#FFFFFF', textAlign: 'center', fontWeight: 'bold' }, collectorNumber: { fontFamily: 'MPlantin, serif', fontSize: 10, color: '#FFFFFF', textAlign: 'left', fontWeight: 'normal' }, artist: { fontFamily: 'Beleren, sans-serif', fontSize: 10, color: '#FFFFFF', textAlign: 'right', fontWeight: 'normal' },
+        }
+    }
+];
+
+// --- Middleware ---
 app.use(cors());
-app.use(express.json());
-
-// Statické servírování nahraných souborů
+app.use(express.json({ limit: '10mb' })); // Zvýšení limitu pro base64 obrázky v těle požadavku
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Konfigurace pro nahrávání souborů pomocí Multer
+// --- Multer pro nahrávání souborů ---
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const dir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
     filename: (req, file, cb) => {
-        // Unikátní název souboru
         cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
     }
 });
 const upload = multer({ storage });
 
-// Middleware pro ověření JWT tokenu
+// --- Middleware pro ověření tokenu ---
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -56,22 +74,34 @@ const authenticateToken = (req, res, next) => {
 // AUTH
 app.post('/api/auth/register', (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ message: "Username and password are required" });
+    if (!username || !password) return res.status(400).json({ message: "Uživatelské jméno a heslo jsou povinné." });
 
     const hashedPassword = bcrypt.hashSync(password, 8);
     db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function(err) {
-        if (err) return res.status(500).json({ message: "Could not register user. Username might already be taken." });
-        res.status(201).json({ message: "User registered successfully", userId: this.lastID });
+        if (err) return res.status(500).json({ message: "Nelze zaregistrovat uživatele. Jméno je již obsazené." });
+
+        const userId = this.lastID;
+        // Přidání výchozích šablon pro nového uživatele
+        const stmt = db.prepare("INSERT INTO templates (user_id, name, frame_image_url, elements, fonts) VALUES (?, ?, ?, ?, ?)");
+        DEFAULT_TEMPLATES.forEach(t => {
+            stmt.run(userId, t.name, t.frameImageUrl, JSON.stringify(t.elements), JSON.stringify(t.fonts));
+        });
+        stmt.finalize((err) => {
+            if (err) console.error("Chyba při vkládání výchozích šablon pro uživatele " + userId, err);
+        });
+
+        res.status(201).json({ message: "Uživatel úspěšně zaregistrován.", userId });
     });
 });
 
 app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body;
     db.get('SELECT * FROM users WHERE username = ?', [username], (err, user) => {
-        if (err || !user) return res.status(404).json({ message: "User not found" });
+        if (err || !user) return res.status(404).json({ message: "Uživatel nenalezen." });
 
-        const passwordIsValid = bcrypt.compareSync(password, user.password);
-        if (!passwordIsValid) return res.status(401).json({ accessToken: null, message: "Invalid Password!" });
+        if (!bcrypt.compareSync(password, user.password)) {
+            return res.status(401).json({ accessToken: null, message: "Neplatné heslo!" });
+        }
 
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: 86400 }); // 24 hodin
         res.status(200).json({ accessToken: token });
@@ -81,8 +111,7 @@ app.post('/api/auth/login', (req, res) => {
 // ASSETS
 app.get('/api/assets', authenticateToken, (req, res) => {
     db.all('SELECT * FROM assets WHERE user_id = ? ORDER BY id DESC', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ message: "Error fetching assets" });
-        // Přidáme plnou URL k obrázkům
+        if (err) return res.status(500).json({ message: "Chyba při načítání obrázků." });
         const assets = rows.map(row => ({
             id: row.id,
             url: `${req.protocol}://${req.get('host')}/uploads/${row.filename}`
@@ -92,25 +121,63 @@ app.get('/api/assets', authenticateToken, (req, res) => {
 });
 
 app.post('/api/assets', authenticateToken, upload.single('art'), (req, res) => {
-    if (!req.file) return res.status(400).send('No file uploaded.');
-
+    if (!req.file) return res.status(400).send('Nebyl nahrán žádný soubor.');
     const { filename, path: filePath } = req.file;
     db.run('INSERT INTO assets (user_id, filename, path) VALUES (?, ?, ?)', [req.user.id, filename, filePath], function(err) {
-        if (err) return res.status(500).json({ message: "Could not save asset to database" });
-        
+        if (err) return res.status(500).json({ message: "Nepodařilo se uložit obrázek do databáze." });
         const assetUrl = `${req.protocol}://${req.get('host')}/uploads/${filename}`;
         res.status(201).json({ id: this.lastID, url: assetUrl });
     });
 });
 
-// Statické servírování front-end aplikace (pro produkci)
-// app.use(express.static(path.join(__dirname, '../client/dist')));
+app.get('/api/templates', authenticateToken, (req, res) => {
+    db.all('SELECT * FROM templates WHERE user_id = ?', [req.user.id], (err, rows) => {
+        if (err) {
+            console.error("Database error fetching templates:", err);
+            return res.status(500).json({ message: "Chyba při načítání šablon." });
+        }
+        try {
+            const templates = rows.map(row => ({
+                id: row.id,
+                user_id: row.user_id,
+                name: row.name,
+                frameImageUrl: row.frame_image_url,
+                // Bezpečnostní kontrola: parsujeme, jen pokud data existují. Jinak vracíme {}.
+                elements: row.elements ? JSON.parse(row.elements) : {},
+                fonts: row.fonts ? JSON.parse(row.fonts) : {}
+            }));
+            res.json(templates);
+        } catch (parseError) {
+            console.error("Error parsing template data from DB:", parseError);
+            res.status(500).json({ message: "Chyba ve formátu dat šablon v databázi." });
+        }
+    });
+});
 
-// app.get('*', (req, res) => {
-//     res.sendFile(path.join(__dirname, '../client/dist/index.html'));
-// });
+app.put('/api/templates/:id', authenticateToken, (req, res) => {
+    const { name, frameImageUrl, elements, fonts } = req.body;
+    const { id } = req.params;
+    db.run(
+        `UPDATE templates SET name = ?, frame_image_url = ?, elements = ?, fonts = ? WHERE id = ? AND user_id = ?`,
+        [name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts), id, req.user.id],
+        function (err) {
+            if (err) return res.status(500).json({ message: "Chyba při aktualizaci šablony." });
+            if (this.changes === 0) return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
+            res.status(200).json({ message: "Šablona úspěšně aktualizována." });
+        }
+    );
+});
 
 
+// AI ART GENERATION
+app.post('/api/generate-art', authenticateToken, async (req, res) => {
+    // TATO ČÁST JE POUZE PLACEHOLDER A VYŽADUJE IMPLEMENTACI PODLE AKTUÁLNÍ DOKUMENTACE
+    // @google/generative-ai pro generování obrázků.
+    res.status(501).json({ message: "Generování AI obrázků na serveru není plně implementováno." });
+});
+
+
+// --- Spuštění serveru ---
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server běží na portu ${PORT}`);
 });

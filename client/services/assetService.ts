@@ -19,6 +19,30 @@ export const assetService = {
         return assets.map((asset: any) => ({ id: asset.id, dataUrl: asset.url }));
     },
 
+
+        getTemplates: async (): Promise<Template[]> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to fetch templates');
+        return await response.json();
+    },
+
+    updateTemplate: async (template: Template): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates/${template.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(template),
+        });
+        if (!response.ok) throw new Error('Failed to update template');
+    },
+
+    
     addArtAsset: async (dataUrl: string): Promise<ArtAsset> => {
         const token = getAuthToken();
         
