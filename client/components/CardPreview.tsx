@@ -1,26 +1,53 @@
 import React from 'react';
-import { CardData, CardType, Rarity, Template } from '../types';
-import ManaSymbol from './ManaSymbol';
-import { RARITY_COLORS } from '../constants';
+import { CardData, CardType, Template } from '../types';
+// ZMĚNA: Odstraněn import ManaSymbol, místo toho importujeme MANA_SYMBOLS
+import { RARITY_COLORS, MANA_SYMBOLS } from '../constants';
 
 interface CardPreviewProps {
     cardData: CardData;
     template: Template;
-    scale?: number; // << NOVÁ PROPRIETA (např. 0.6 pro 60% velikost)
+    scale?: number;
 }
 
+const SYMBOL_OFFSETS: Record<string, number> = {
+  T: -0.16,   // zvedne o 0.16em
+  UT: -0.08,  // zvedne o 0.08em
+  // ostatní nech prázdné = 0
+};
+
 const parseTextWithSymbols = (text: string) => {
-    if (!text) return null;
-    const parts = text.split(/(\{[^}]+\})/g);
-    return parts.map((part, index) => {
-        if (part.startsWith('{') && part.endsWith('}')) {
-            const symbol = part.replace(/[{}]/g, '');
-            // Velikost symbolu v textu bude také škálována
-            const symbolSize = 16 * (index === 0 ? 1 : (part.match(/T/) ? 20 : 1)); // Placeholder pro tap symbol
-            return <ManaSymbol key={`${symbol}-${index}`} symbol={symbol} className="inline-block align-text-bottom mx-px" style={{ height: `${symbolSize}px`, width: `${symbolSize}px`}}/>;
-        }
-        return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
-    });
+  if (!text) return null;
+  const parts = text.split(/(\{[^}]+\})/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith('{') && part.endsWith('}')) {
+      const symbol = part.slice(1, -1);
+      const offsetEm = SYMBOL_OFFSETS[symbol] ?? 0;
+      const imageUrl = MANA_SYMBOLS[symbol]; // ZMĚNA: Získání URL
+
+      // ZMĚNA: Vykreslení <img> místo komponenty ManaSymbol
+      if (imageUrl) {
+        return (
+          <img
+            key={`${symbol}-${index}`}
+            src={imageUrl}
+            alt={symbol}
+            className="mx-px"
+            style={{
+              display: 'inline-block',
+              height: '1em',
+              width: '1em',
+              verticalAlign: 'middle',
+              transform: `translateY(${offsetEm}em)`,
+            }}
+          />
+        );
+      }
+      // Fallback pro symbol, který nemáme v mapě
+      return <React.Fragment key={`text-fallback-${index}`}>{part}</React.Fragment>;
+    }
+    return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+  });
 };
 
 const generateMaskedGradientStyle = (template: Template): React.CSSProperties => {
@@ -82,7 +109,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
         fontWeight: fonts[font].fontWeight || 'normal',
         width: '100%',
         whiteSpace: 'pre-wrap',
-        lineHeight: 1.2, // Ponecháme relativní, aby se správně škáloval s font-size
+        lineHeight: 1.2,
     });
 
     return (
@@ -94,9 +121,11 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
                 borderRadius: `${18 * scale}px`,
             }}
         >
-            <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
-                <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
-            </div>
+            {(elements.art.visible ?? true) && (
+                <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
+                    <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
+                </div>
+            )}
 
             <img 
                 src={frameImageUrl} 
@@ -116,50 +145,78 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
                 }}
             />
 
-            <div style={getElementStyle('title')}>
-                <p style={getFontStyle('title')}>{name}</p>
-            </div>
-            
-            <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: `${2 * scale}px`}}>
-                {parsedCost.map((symbol, index) => symbol && <ManaSymbol key={index} symbol={symbol} className={`inline-block`} style={{ height: `${24 * scale}px`, width: `${24 * scale}px`}} />)}
-            </div>
-
-            <div style={getElementStyle('typeLine')}>
-                <p style={getFontStyle('typeLine')}>{cardType}{subtype && ` — ${subtype}`}</p>
-            </div>
-
-            <div style={{ ...getElementStyle('setSymbol'), justifyContent: 'center' }}>
-                <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
-            </div>
-
-            <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: `${5 * scale}px` }}>
-                <div style={getFontStyle('rulesText')}>
-                    {rulesText.split('\n').map((line, i) => (
-                        <div key={i}>{parseTextWithSymbols(line)}</div>
-                    ))}
+            {(elements.title.visible ?? true) && (
+                <div style={getElementStyle('title')}>
+                    <p style={getFontStyle('title')}>{name}</p>
                 </div>
-                 {flavorText && (
-                    <div style={{...getFontStyle('flavorText'), paddingTop: `${8 * scale}px` }}>
-                       {flavorText.split('\n').map((line, i) => (
-                           <div key={i}>{line}</div>
+            )}
+            
+            {(elements.manaCost.visible ?? true) && (
+                <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: `${2 * scale}px`}}>
+                    {/* ZMĚNA: Vykreslení <img> místo komponenty ManaSymbol */}
+                    {parsedCost.map((symbol, index) => {
+                        const imageUrl = MANA_SYMBOLS[symbol];
+                        if (!imageUrl) return null;
+                        
+                        return (
+                            <img 
+                                key={index} 
+                                src={imageUrl}
+                                alt={symbol}
+                                className="inline-block"
+                                style={{ height: `${24 * scale}px`, width: `${24 * scale}px` }} 
+                            />
+                        );
+                    })}
+                </div>
+            )}
+
+            {(elements.typeLine.visible ?? true) && (
+                <div style={getElementStyle('typeLine')}>
+                    <p style={getFontStyle('typeLine')}>{cardType}{subtype && ` — ${subtype}`}</p>
+                </div>
+            )}
+
+            {(elements.setSymbol.visible ?? true) && (
+                <div style={{ ...getElementStyle('setSymbol'), justifyContent: 'center' }}>
+                    <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
+                </div>
+            )}
+
+            {(elements.textBox.visible ?? true) && (
+                <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: `${5 * scale}px` }}>
+                    <div style={getFontStyle('rulesText')}>
+                        {rulesText.split('\n').map((line, i) => (
+                            <div key={i}>{parseTextWithSymbols(line)}</div>
                         ))}
                     </div>
-                )}
-            </div>
+                     {flavorText && (
+                        <div style={{...getFontStyle('flavorText'), paddingTop: `${8 * scale}px` }}>
+                           {flavorText.split('\n').map((line, i) => (
+                               <div key={i}>{line}</div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
-            {isCreature && (
+            {isCreature && (elements.ptBox.visible ?? true) && (
                 <div style={{...getElementStyle('ptBox'), justifyContent: 'center' }}>
                     <span style={getFontStyle('pt')}>{power} / {toughness}</span>
                 </div>
             )}
 
-            <div style={getElementStyle('collectorNumber')}>
-                 <span style={getFontStyle('collectorNumber')}>{collectorNumber}</span>
-            </div>
+            {(elements.collectorNumber.visible ?? true) && (
+                <div style={getElementStyle('collectorNumber')}>
+                     <span style={getFontStyle('collectorNumber')}>{collectorNumber}</span>
+                </div>
+            )}
 
-            <div style={getElementStyle('artist')}>
-                 <span style={getFontStyle('artist')}>Illus. {artist}</span>
-            </div>
+            {(elements.artist.visible ?? true) && (
+                <div style={getElementStyle('artist')}>
+                     <span style={getFontStyle('artist')}>Illus. {artist}</span>
+                </div>
+            )}
         </div>
     );
 };

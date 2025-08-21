@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef } from "react";
 import {
   CardData,
   CardType,
@@ -8,7 +8,7 @@ import {
   CustomSetSymbol,
   CardArt,
 } from "../types";
-import { SET_SYMBOLS, MANA_SYMBOLS } from "../constants";
+import { SET_SYMBOLS } from "../constants";
 import ArtEditor from "./ArtEditor";
 
 interface EditorPanelProps {
@@ -22,63 +22,8 @@ interface EditorPanelProps {
   onAddCustomSetSymbol: (name: string, dataUrl: string) => void;
   template: Template;
 }
-const AVAILABLE_SYMBOLS: { key: string; label: string; preview: string }[] = [
-  { key: "W", label: "White Mana", preview: MANA_SYMBOLS["W"] },
-  { key: "U", label: "Blue Mana", preview: MANA_SYMBOLS["U"] },
-  { key: "B", label: "Black Mana", preview: MANA_SYMBOLS["B"] },
-  { key: "R", label: "Red Mana", preview: MANA_SYMBOLS["R"] },
-  { key: "G", label: "Green Mana", preview: MANA_SYMBOLS["G"] },
-  { key: "C", label: "Colorless", preview: MANA_SYMBOLS["C"] },
-  { key: "W/P", label: "Tap", preview: MANA_SYMBOLS["W/P"] },
-  { key: "U/P", label: "Tap", preview: MANA_SYMBOLS["U/P"] },
-  { key: "B/P", label: "Tap", preview: MANA_SYMBOLS["B/P"] },
-  { key: "R/P", label: "Tap", preview: MANA_SYMBOLS["R/P"] },
-  { key: "G/P", label: "Tap", preview: MANA_SYMBOLS["G/P"] },
-  { key: "W/U", label: "White/Blue", preview: MANA_SYMBOLS["W/U"] },
-  { key: "W/B", label: "White/Black", preview: MANA_SYMBOLS["W/B"] },
-  { key: "R/W", label: "Red/White", preview: MANA_SYMBOLS["R/W"] },
-  { key: "G/W", label: "Green/White", preview: MANA_SYMBOLS["G/W"] },
-  { key: "U/B", label: "Blue/Black", preview: MANA_SYMBOLS["U/B"] },
-  { key: "U/R", label: "Blue/Red", preview: MANA_SYMBOLS["U/R"] },
-  { key: "G/U", label: "Green/Blue", preview: MANA_SYMBOLS["G/U"] },
-  { key: "B/R", label: "Black/Red", preview: MANA_SYMBOLS["B/R"] },
-  { key: "B/G", label: "Black/Green", preview: MANA_SYMBOLS["B/G"] },
-  { key: "R/G", label: "Red/Green", preview: MANA_SYMBOLS["R/G"] },
-];
-
-// někam nahoru k ostatním funkcím
-const copyToClipboard = async (text: string) => {
-  try {
-    if (
-      typeof navigator !== "undefined" &&
-      "clipboard" in navigator &&
-      window.isSecureContext
-    ) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // spadne? zkus fallback níže
-  }
-
-  // Fallback pro ne-HTTPS / starší prohlížeče
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    ta.style.top = "0";
-    ta.setAttribute("readonly", "true");
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, ta.value.length);
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-};
+// Poznámka: `onSymbolInsert` prop již není potřeba, protože se logika přesunula do App.tsx
+// a je nezávislá na této komponentě.
 
 const EditorPanel: React.FC<EditorPanelProps> = (props) => {
   const {
@@ -93,8 +38,6 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
     template,
   } = props;
   const customSymbolInputRef = useRef<HTMLInputElement>(null);
-  const rulesTextRef = useRef<HTMLTextAreaElement>(null);
-  const [cursorPosition, setCursorPosition] = useState<number | null>(null);
 
   const handleChange = <K extends keyof CardData>(
     key: K,
@@ -110,7 +53,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
     if (file) {
       const name = prompt(
         "Enter a name for this set symbol:",
-        file.name.replace(/\.[/.]+$/, "")
+        file.name.replace(/\.[^/.]+$/, "")
       );
       if (name) {
         const reader = new FileReader();
@@ -128,46 +71,6 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
     ...customSetSymbols.map((s) => ({ name: s.name, url: s.url })),
   ];
 
-  const insertManaSymbol = useCallback(
-    (symbol: string, event: React.MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      const token = `{${symbol}}`;
-      const currentValue = cardData.rulesText ?? "";
-      const textarea = rulesTextRef.current;
-
-      let start = cursorPosition ?? currentValue.length;
-      let end = start;
-
-      if (textarea && document.activeElement === textarea) {
-        start = textarea.selectionStart;
-        end = textarea.selectionEnd;
-      }
-
-      const newValue =
-        currentValue.slice(0, start) + token + currentValue.slice(end);
-      handleChange("rulesText", newValue);
-
-      // posuň caret hned po vložení
-      requestAnimationFrame(() => {
-        if (textarea) {
-          const pos = start + token.length;
-          textarea.focus();
-          textarea.setSelectionRange(pos, pos);
-          setCursorPosition(pos);
-        }
-      });
-    },
-    [cardData.rulesText, cursorPosition, handleChange]
-  );
-
-  const handleRulesTextSelect = () => {
-    if (rulesTextRef.current) {
-      setCursorPosition(rulesTextRef.current.selectionStart);
-    }
-  };
-
   const handleTextareaScroll = (event: React.UIEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
   };
@@ -180,11 +83,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
+          id="name" // << ZMĚNA ZDE
           label="Name"
           value={cardData.name}
           onChange={(e) => handleChange("name", e.target.value)}
         />
         <Input
+          id="manaCost" // << ZMĚNA ZDE
           label="Mana Cost"
           value={cardData.manaCost}
           onChange={(e) => handleChange("manaCost", e.target.value)}
@@ -213,6 +118,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
           ))}
         </Select>
         <Input
+          id="subtype" // << ZMĚNA ZDE
           label="Subtype"
           value={cardData.subtype}
           onChange={(e) => handleChange("subtype", e.target.value)}
@@ -221,40 +127,16 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       </div>
 
       <Textarea
+        id="rulesText" // << ZMĚNA ZDE
         label="Rules Text"
         value={cardData.rulesText}
         onChange={(e) => handleChange("rulesText", e.target.value)}
         rows={4}
-        onClick={handleRulesTextSelect}
-        onKeyUp={handleRulesTextSelect}
-        onSelect={handleRulesTextSelect}
-        ref={rulesTextRef}
         onWheel={handleTextareaScroll}
       />
-<div className="grid grid-cols-6 gap-2">
-  {AVAILABLE_SYMBOLS.map((sym) => (
-    <div
-      key={sym.key}
-      title={`Click to copy: {${sym.key}}`}
-      onClick={async () => {
-        const ok = await copyToClipboard(`{${sym.key}}`);
-        // volitelné: mini feedback
-        if (!ok) alert("Nepodařilo se zkopírovat do schránky :(");
-      }}
-      className="w-[50px] h-[50px] bg-gray-700 hover:bg-gray-600 
-                 flex items-center justify-center rounded-md 
-                 cursor-pointer border border-gray-500"
-    >
-      <div
-        className="w-[32px] h-[32px] flex items-center justify-center"
-        // pokud je to SVG string:
-        dangerouslySetInnerHTML={{ __html: sym.preview }}
-      />
-    </div>
-  ))}
-</div>
-
+      
       <Textarea
+        id="flavorText" // << ZMĚNA ZDE
         label="Flavor Text"
         value={cardData.flavorText}
         onChange={(e) => handleChange("flavorText", e.target.value)}
@@ -264,11 +146,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       {cardData.cardType === CardType.Creature && (
         <div className="grid grid-cols-2 gap-4">
           <Input
+            id="power" // << ZMĚNA ZDE
             label="Power"
             value={cardData.power}
             onChange={(e) => handleChange("power", e.target.value)}
           />
           <Input
+            id="toughness" // << ZMĚNA ZDE
             label="Toughness"
             value={cardData.toughness}
             onChange={(e) => handleChange("toughness", e.target.value)}
@@ -322,11 +206,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
+          id="artist" // << ZMĚNA ZDE
           label="Artist"
           value={cardData.artist}
           onChange={(e) => handleChange("artist", e.target.value)}
         />
         <Input
+          id="collectorNumber" // << ZMĚNA ZDE
           label="Collector #"
           value={cardData.collectorNumber}
           onChange={(e) => handleChange("collectorNumber", e.target.value)}
@@ -361,15 +247,16 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
   );
 };
 
-// Pomocné komponenty
+// ======================= ZMĚNA ZDE: Přidání `id` do props =======================
 const Input: React.FC<
-  React.InputHTMLAttributes<HTMLInputElement> & { label: string }
-> = ({ label, ...props }) => (
+  React.InputHTMLAttributes<HTMLInputElement> & { label: string; id: string }
+> = ({ label, id, ...props }) => (
   <div>
     <label className="block text-sm font-medium text-gray-300 mb-1">
       {label}
     </label>
     <input
+      id={id} // <-- id se nyní předává inputu
       {...props}
       className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
     />
@@ -378,15 +265,17 @@ const Input: React.FC<
 
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string;
+  id: string; // <-- přidáno id
 };
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, ...props }, ref) => (
+  ({ label, id, ...props }, ref) => (
     <div>
       <label className="block text-sm font-medium text-gray-300 mb-1">
         {label}
       </label>
       <textarea
+        id={id} // <-- id se nyní předává textarea
         {...props}
         ref={ref}
         className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"

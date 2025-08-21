@@ -43,6 +43,7 @@ export interface TemplateElement {
     y: number; // %
     width: number; // %
     height: number; // %
+    visible?: boolean; // << ZMĚNA ZDE: Přidána volitelná vlastnost pro viditelnost
 }
 
 export interface FontProperties {
@@ -56,7 +57,7 @@ export interface FontProperties {
 
 export interface Template {
     id: string;
-        user_id: number; // ID autora šablony
+    user_id: number; // ID autora šablony
     authorUsername?: string; // Jméno autora (nepovinné, kdyby byl uživatel smazán)
     name: string;
     frameImageUrl: string;
