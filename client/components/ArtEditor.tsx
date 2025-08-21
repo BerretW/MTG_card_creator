@@ -1,25 +1,26 @@
 import React, { useState, useCallback } from 'react';
-import { generateArt } from '../services/geminiService';
+import { generateArt, ApiProvider } from '../services/aiArtService'; // << ZMĚNA IMPORTU
 import ArtCropper from './ArtCropper';
 import AssetLibrary from './AssetLibrary';
-import { ArtAsset, CardArt } from '../types'; // Přidáme CardArt
-import imageCompression from 'browser-image-compression'; // Import
+import { ArtAsset, CardArt } from '../types';
+import imageCompression from 'browser-image-compression';
 
 interface ArtEditorProps {
-    art: CardArt; // << ZMĚNA
-    setArt: (art: CardArt) => void; // << ZMĚNA
+    art: CardArt;
+    setArt: (art: CardArt) => void;
     artAssets: ArtAsset[];
-    onArtUpdate: (originalUrl: string, croppedUrl: string) => void; // << ZMĚNA
+    onArtUpdate: (originalUrl: string, croppedUrl: string) => void;
     aspectRatio: number;
 }
 
-
-const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpdate, aspectRatio }) => {
+const ArtEditor: React.FC<ArtEditorProps> = ({ art, artAssets, onArtUpdate, aspectRatio }) => {
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
     const [croppingImageUrl, setCroppingImageUrl] = useState<string | null>(null);
 
+    // Stavy pro AI generování
     const [aiPrompt, setAiPrompt] = useState('');
+    const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini'); // << NOVÝ STAV
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -40,9 +41,7 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
                 reader.readAsDataURL(compressedFile);
             } catch (error) {
                 console.error("Error compressing image:", error);
-                // Handle error appropriately
             }
-
         }
     };
     
@@ -56,8 +55,9 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
         setIsLoading(true);
         setError(null);
         try {
-            const generatedImageUrl = await generateArt(aiPrompt);
-            setCroppingImageUrl(generatedImageUrl); // Go to cropper after generation
+            // Použijeme novou službu s vybraným providerem
+            const generatedImageUrl = await generateArt(aiPrompt, apiProvider);
+            setCroppingImageUrl(generatedImageUrl);
             setIsAiModalOpen(false);
         } catch (err: any) {
             setError(err.message || "An unknown error occurred.");
@@ -67,11 +67,10 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
     };
     
      const handleCropComplete = (croppedDataUrl: string) => {
-        // croppingImageUrl stále drží původní obrázek!
         if (croppingImageUrl) {
             onArtUpdate(croppingImageUrl, croppedDataUrl);
         }
-        setCroppingImageUrl(null); // Zavřeme ořezávač
+        setCroppingImageUrl(null);
     };
 
     return (
@@ -89,7 +88,6 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
                     <button onClick={() => setIsAiModalOpen(true)} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-md transition text-sm">
                         Generate AI
                     </button>
-                    {/* --- NOVÉ TLAČÍTKO --- */}
                     <button 
                         onClick={() => setCroppingImageUrl(art.original)} 
                         disabled={!art.original}
@@ -116,8 +114,51 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, setArt, artAssets, onArtUpda
                     onClose={() => setIsLibraryOpen(false)}
                 />
             )}
-
             
+            {isAiModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700 flex flex-col">
+                        <h3 className="text-xl font-beleren text-yellow-300 mb-4">Generovat obrázek pomocí AI</h3>
+                        
+                        {/* --- NOVÝ VÝBĚR API --- */}
+                        <fieldset className="mb-4">
+                            <legend className="block text-sm font-medium text-gray-300 mb-2">Vyberte službu</legend>
+                            <div className="flex gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="apiProvider" value="gemini" checked={apiProvider === 'gemini'} onChange={() => setApiProvider('gemini')} className="h-4 w-4 bg-gray-700 border-gray-600 text-yellow-400 focus:ring-yellow-500"/>
+                                    <span className="text-gray-200">Google Gemini</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="apiProvider" value="openai" checked={apiProvider === 'openai'} onChange={() => setApiProvider('openai')} className="h-4 w-4 bg-gray-700 border-gray-600 text-yellow-400 focus:ring-yellow-500"/>
+                                    <span className="text-gray-200">OpenAI (DALL-E 3)</span>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <p className="text-gray-400 text-sm mb-1">
+                            Zadejte popis obrázku (nejlépe v angličtině):
+                        </p>
+                        <textarea
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
+                            rows={4}
+                            placeholder="Např. 'A wise old wizard casting a spell in a dark library'"
+                        />
+                        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                        <div className="mt-6 flex justify-end gap-4">
+                            <button onClick={() => setIsAiModalOpen(false)} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 transition">Zrušit</button>
+                            <button 
+                                onClick={handleGenerateArt} 
+                                disabled={isLoading || !aiPrompt}
+                                className="py-2 px-6 rounded-md bg-purple-600 hover:bg-purple-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed"
+                            >
+                                {isLoading ? 'Generuji...' : 'Generovat'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
