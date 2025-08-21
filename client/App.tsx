@@ -194,6 +194,23 @@ const App: React.FC = () => {
         }
     };
 
+    const handleDeleteTemplate = async (templateId: string) => {
+        try {
+            await assetService.deleteTemplate(templateId);
+            const remainingTemplates = templates.filter(t => t.id !== templateId);
+            setTemplates(remainingTemplates);
+
+            // Pokud byla smazána právě používaná šablona, vybereme první ze zbývajících
+            if (cardData.templateId === templateId) {
+                setCardData(prev => ({ ...prev, templateId: remainingTemplates[0]?.id || '' }));
+            }
+            alert("Šablona byla úspěšně smazána.");
+        } catch (error) {
+            console.error("Failed to delete template:", error);
+            alert(`Chyba při mazání šablony: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    };
+
     const handleDownload = useCallback(() => {
         if (!cardPreviewRef.current) return;
         toPng(cardPreviewRef.current, { cacheBust: true, pixelRatio: 2 })
@@ -330,6 +347,7 @@ const App: React.FC = () => {
                     onSave={handleSaveTemplates}
                     onClose={() => setTemplateEditorOpen(false)}
                     currentUserId={currentUserId}
+                    onDelete={handleDeleteTemplate}
                 />
             )}
 

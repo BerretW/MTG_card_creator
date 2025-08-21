@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'; // << Přidán useEffect
+import React, { useState, useRef, useEffect } from 'react';
 import { Template, TemplateElement, FontProperties } from '../types';
 import DraggableResizableBox from './DraggableResizableBox';
 import { AVAILABLE_FONTS, DEFAULT_TEMPLATES } from '../constants';
@@ -8,32 +8,59 @@ interface TemplateEditorProps {
     onSave: (templates: Template[]) => void;
     onClose: () => void;
     currentUserId: number | null;
+    onDelete: (templateId: string) => void;
 }
 
 type ElementKey = keyof Template['elements'];
 type FontKey = keyof Template['fonts'];
 
-const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTemplates, onSave, onClose, currentUserId }) => {
-    // Tento vnitřní stav je zdrojem problému. Musíme ho synchronizovat.
+const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTemplates, onSave, onClose, currentUserId, onDelete }) => {
     const [templates, setTemplates] = useState<Template[]>(() => JSON.parse(JSON.stringify(initialTemplates)));
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(templates[0]?.id || null);
     const [selectedElementKey, setSelectedElementKey] = useState<ElementKey | null>(null);
+    const [showForeignTemplates, setShowForeignTemplates] = useState(true);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // --- ŘEŠENÍ ZDE ---
-    // Tento useEffect se spustí pokaždé, když se změní `initialTemplates` (props z App.tsx).
-    // Tím zajistíme, že vnitřní stav editoru je VŽDY synchronizovaný s hlavním stavem aplikace.
     useEffect(() => {
         setTemplates(JSON.parse(JSON.stringify(initialTemplates)));
-        // Pokud aktivní šablona po aktualizaci již neexistuje, vybereme první.
         if (!initialTemplates.some(t => t.id === activeTemplateId)) {
             setActiveTemplateId(initialTemplates[0]?.id || null);
         }
-    }, [initialTemplates]);
-    // --- KONEC ŘEŠENÍ ---
+    }, [initialTemplates, activeTemplateId]);
 
     const activeTemplate = templates.find(t => t.id === activeTemplateId);
+
+    const handleToggleForeignTemplates = (show: boolean) => {
+        setShowForeignTemplates(show);
+
+        if (!show) {
+            const activeTpl = templates.find(t => t.id === activeTemplateId);
+            if (activeTpl && activeTpl.user_id !== currentUserId) {
+                const firstUserTemplate = templates.find(t => t.user_id === currentUserId);
+                setActiveTemplateId(firstUserTemplate?.id || null);
+                setSelectedElementKey(null);
+            }
+        }
+    };
+
+    const handleDelete = (template: Template) => {
+        if (window.confirm(`Opravdu si přejete smazat šablonu "${template.name}"? Tato akce je nevratná.`)) {
+            if (activeTemplateId === template.id) {
+                const remainingTemplates = templates.filter(t => t.id !== template.id && (showForeignTemplates || t.user_id === currentUserId));
+                setActiveTemplateId(remainingTemplates[0]?.id || null);
+                setSelectedElementKey(null);
+            }
+            onDelete(template.id);
+        }
+    };
+
+    const filteredTemplates = templates.filter(t => {
+        if (showForeignTemplates) {
+            return true;
+        }
+        return t.user_id === currentUserId;
+    });
 
     const handleSelectTemplate = (id: string) => {
         setActiveTemplateId(id);
@@ -57,30 +84,29 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
     };
 
     const handleDuplicateTemplate = (idToDuplicate: string) => {
-        if (currentUserId === null) return; // Pojistka
+        if (currentUserId === null) return;
         const templateToDuplicate = templates.find(t => t.id === idToDuplicate);
         if (!templateToDuplicate) return;
         
-        // Vytvoříme hlubokou kopii, abychom se vyhnuli referencím na starý objekt
         const newTemplate = JSON.parse(JSON.stringify(templateToDuplicate));
         
         newTemplate.id = `new-${Date.now()}`;
         newTemplate.name = `${templateToDuplicate.name} (Kopie)`;
-        newTemplate.user_id = currentUserId; // Nový vlastník
-        delete newTemplate.authorUsername; // Odstraníme starého autora
+        newTemplate.user_id = currentUserId;
+        delete newTemplate.authorUsername;
 
         setTemplates(prev => [...prev, newTemplate]);
         setActiveTemplateId(newTemplate.id);
     };
     
     const handleAddNewTemplate = () => {
-        if (currentUserId === null) return; // Pojistka
+        if (currentUserId === null) return;
         const baseTemplate = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES[0])); 
         const newTemplate: Template = {
             ...baseTemplate,
             id: `new-${Date.now()}`,
             name: 'Nová šablona',
-            user_id: currentUserId, // Nový vlastník
+            user_id: currentUserId,
         };
         setTemplates(prev => [...prev, newTemplate]);
         setActiveTemplateId(newTemplate.id);
@@ -199,6 +225,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         const element = activeTemplate.elements[selectedElementKey];
         const fontKey = getFontKeyFromElement(selectedElementKey);
         const font = fontKey ? activeTemplate.fonts[fontKey] : null;
+        
+        // TATO DUPLICITNÍ ŘÁDKA BYLA ODSTRANĚNA
+        // const isAuthorOfActive = activeTemplate.user_id === currentUserId; 
 
         const handleElementChange = (prop: keyof TemplateElement, value: string) => {
             const numericValue = parseFloat(value) || 0;
@@ -296,9 +325,23 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                 <div className="flex-grow flex overflow-hidden">
                     <aside className="w-1/4 bg-gray-900/50 p-4 space-y-4 overflow-y-auto">
                         <div>
-                            <h4 className="text-lg font-bold text-yellow-300 mb-2">Šablony</h4>
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-lg font-bold text-yellow-300">Šablony</h4>
+                                <div className="flex items-center text-sm">
+                                    <input
+                                        type="checkbox"
+                                        id="showForeign"
+                                        checked={showForeignTemplates}
+                                        onChange={(e) => handleToggleForeignTemplates(e.target.checked)}
+                                        className="w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500 cursor-pointer"
+                                    />
+                                    <label htmlFor="showForeign" className="ml-2 text-gray-300 select-none cursor-pointer">
+                                        Zobrazit cizí
+                                    </label>
+                                </div>
+                            </div>
                             <div className="space-y-2">
-                                {templates.map(t => (
+                                {filteredTemplates.map(t => (
                                     <div key={t.id} className={`flex items-center justify-between p-2 rounded cursor-pointer ${activeTemplateId === t.id ? 'bg-yellow-400/20' : 'hover:bg-gray-700'}`} onClick={() => handleSelectTemplate(t.id)}>
                                         <div className="flex-grow truncate pr-2">
                                             <span>{t.name}</span>
@@ -308,11 +351,26 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                                                 </span>
                                             )}
                                         </div>
-                                        <button title="Duplikovat šablonu" onClick={(e) => { e.stopPropagation(); handleDuplicateTemplate(t.id); }} className="text-gray-400 hover:text-white p-1 flex-shrink-0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                        </button>
+                                        <div className="flex items-center flex-shrink-0">
+                                            <button title="Duplikovat šablonu" onClick={(e) => { e.stopPropagation(); handleDuplicateTemplate(t.id); }} className="text-gray-400 hover:text-white p-1">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                            </button>
+                                            {t.user_id === currentUserId && (
+                                                <button title="Smazat šablonu" onClick={(e) => { e.stopPropagation(); handleDelete(t); }} className="text-gray-400 hover:text-red-500 p-1">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
+                                {filteredTemplates.length === 0 && (
+                                    <div className="p-2 text-center text-sm text-gray-400">
+                                        {showForeignTemplates 
+                                            ? "Nebyly nalezeny žádné šablony."
+                                            : "Nemáte žádné vlastní šablony."
+                                        }
+                                    </div>
+                                )}
                             </div>
                             <button onClick={handleAddNewTemplate} className="w-full mt-4 py-2 px-4 rounded-md bg-blue-700 hover:bg-blue-600 text-sm transition-colors">
                                 + Přidat novou šablonu

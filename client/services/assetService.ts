@@ -101,6 +101,22 @@ export const assetService = {
     },
     
     /**
+     * Smaže šablonu na serveru.
+     * @param templateId ID šablony ke smazání.
+     */
+    deleteTemplate: async (templateId: string): Promise<void> => {
+        const token = getAuthToken();
+        const response = await fetch(`${API_URL}/templates/${templateId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Failed to delete template' }));
+            throw new Error(errorData.message);
+        }
+    },
+
+    /**
      * Získá vlastní symboly sad (aktuálně z localStorage).
      */
     getCustomSetSymbols: async (): Promise<CustomSetSymbol[]> => {
