@@ -6,7 +6,7 @@ interface AddToDeckModalProps {
     cardData: CardData;
     template: Template;
     onClose: () => void;
-    onDecksUpdated: () => void; // Pro obnovení seznamu balíčků v DeckManageru
+    onDecksUpdated: () => void;
 }
 
 const AddToDeckModal: React.FC<AddToDeckModalProps> = ({ cardData, template, onClose, onDecksUpdated }) => {
@@ -68,7 +68,7 @@ const AddToDeckModal: React.FC<AddToDeckModalProps> = ({ cardData, template, onC
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-gray-700 flex flex-col">
                 <h3 className="text-xl font-beleren text-yellow-300 mb-4">Uložit kartu do balíčku</h3>
                 
-                {isLoading && <p>Načítání...</p>}
+                {isLoading && decks.length === 0 && <p>Načítání balíčků...</p>}
                 
                 {!isLoading && !isCreating && (
                     <>
@@ -91,8 +91,14 @@ const AddToDeckModal: React.FC<AddToDeckModalProps> = ({ cardData, template, onC
                              <button onClick={() => setIsCreating(true)} className="w-full text-yellow-400 hover:underline text-sm">... nebo vytvořit nový balíček</button>
                         </div>
                         <div className="mt-6 flex justify-end gap-4">
-                            <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500">Zrušit</button>
-                            <button onClick={handleSave} disabled={!selectedDeckId} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 disabled:bg-gray-500">Uložit</button>
+                            <button onClick={onClose} disabled={isLoading} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 disabled:opacity-50">Zrušit</button>
+                            <button 
+                                onClick={handleSave} 
+                                disabled={!selectedDeckId || isLoading}
+                                className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-wait"
+                            >
+                                {isLoading ? 'Ukládám...' : 'Uložit'}
+                            </button>
                         </div>
                     </>
                 )}
@@ -111,8 +117,14 @@ const AddToDeckModal: React.FC<AddToDeckModalProps> = ({ cardData, template, onC
                            <button onClick={() => setIsCreating(false)} className="w-full text-yellow-400 hover:underline text-sm">... nebo vybrat existující</button>
                         </div>
                         <div className="mt-6 flex justify-end gap-4">
-                            <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500">Zrušit</button>
-                            <button onClick={handleCreateAndSave} disabled={!newDeckName.trim()} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 disabled:bg-gray-500">Vytvořit a Uložit</button>
+                            <button onClick={onClose} disabled={isLoading} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 disabled:opacity-50">Zrušit</button>
+                            <button 
+                                onClick={handleCreateAndSave} 
+                                disabled={!newDeckName.trim() || isLoading}
+                                className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-wait"
+                            >
+                                {isLoading ? 'Vytvářím...' : 'Vytvořit a Uložit'}
+                            </button>
                         </div>
                     </>
                 )}

@@ -1,6 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { toPng } from 'html-to-image';
-import { CardData, Template, ArtAsset, CustomSetSymbol, SavedCard } from './types';
+import { CardData } from './types';
+
+import { useAuthStore } from './store/authStore';
+import { useAppStore } from './store/appStore';
+import { useUiStore } from './store/uiStore';
+
 import EditorPanel from './components/EditorPanel';
 import CardPreview from './components/CardPreview';
 import TemplateEditor from './components/TemplateEditor';
@@ -8,79 +13,40 @@ import Auth from './components/Auth';
 import AddToDeckModal from './components/AddToDeckModal';
 import DeckManager from './components/DeckManager';
 import SymbolPalette from './components/SymbolPalette';
-import { DEFAULT_CARD_DATA } from './constants';
-import { assetService } from './services/assetService';
-
-const getUserIdFromToken = (token: string | null): number | null => {
-    if (!token) return null;
-    try {
-        const payloadBase64 = token.split('.')[1];
-        const decodedPayload = atob(payloadBase64);
-        const payload = JSON.parse(decodedPayload);
-        return payload.id || null;
-    } catch (error) {
-        console.error("Failed to decode token:", error);
-        return null;
-    }
-};
 
 const App: React.FC = () => {
-    const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
-    const [cardData, setCardData] = useState<CardData>(DEFAULT_CARD_DATA);
-    const [templates, setTemplates] = useState<Template[]>([]);
-    const [artAssets, setArtAssets] = useState<ArtAsset[]>([]);
-    const [customSetSymbols, setCustomSetSymbols] = useState<CustomSetSymbol[]>([]);
-    
-    const [editingCardInfo, setEditingCardInfo] = useState<{cardId: number, deckId: number} | null>(null);
-
-    const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
-    const [isAddToDeckModalOpen, setAddToDeckModalOpen] = useState(false);
-    const [isDeckManagerOpen, setDeckManagerOpen] = useState(false);
-    
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { token, userId, login, logout } = useAuthStore();
+    const { 
+      cardData, templates, artAssets, customSetSymbols, editingCardInfo,
+      isLoading, error, loadInitialData, clearData, setCardData,
+      resetCard, updateCardInDeck, updateArt, addCustomSetSymbol,
+      saveTemplates, deleteTemplate, editCard, isCardUpdateLoading
+    } = useAppStore();
+    const { 
+      isTemplateEditorOpen, isAddToDeckModalOpen, isDeckManagerOpen,
+      openTemplateEditor, closeTemplateEditor, openAddToDeckModal,
+      closeAddToDeckModal, openDeckManager, closeDeckManager 
+    } = useUiStore();
 
     const [editorWidth, setEditorWidth] = useState(480);
     const [isResizing, setIsResizing] = useState(false);
     const resizeData = useRef({ startX: 0, startWidth: 0 });
-
     const cardPreviewRef = useRef<HTMLDivElement>(null);
     
-    const currentUserId = getUserIdFromToken(token);
-
     useEffect(() => {
-        if (!token) {
-            setIsLoading(false);
-            return;
+        if (token) {
+            loadInitialData();
+        } else {
+            clearData();
         }
-        const loadData = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const [loadedAssets, loadedSymbols, loadedTemplates] = await Promise.all([
-                    assetService.getArtAssets(),
-                    assetService.getCustomSetSymbols(),
-                    assetService.getTemplates()
-                ]);
+    }, [token, loadInitialData, clearData]);
 
-                setArtAssets(loadedAssets);
-                setCustomSetSymbols(loadedSymbols);
-                setTemplates(loadedTemplates);
-
-                if (!cardData.templateId && loadedTemplates.length > 0) {
-                    setCardData(prev => ({...prev, templateId: loadedTemplates[0].id}));
-                }
-            } catch (err: any) {
-                console.error("Failed to load user data:", err);
-                setError("Nepodařilo se načíst data. Váš token mohl vypršet.");
-                handleLogout();
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
+    const selectedTemplate = templates.find(t => t.id === cardData.templateId);
+    useEffect(() => {
+        if (!selectedTemplate && templates.length > 0) {
+            setCardData({ templateId: templates[0].id });
+        }
+    }, [templates, selectedTemplate, setCardData]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -107,107 +73,31 @@ const App: React.FC = () => {
             window.removeEventListener('mouseup', handleMouseUp);
         };
     }, [isResizing, handleMouseMove, handleMouseUp]);
-
+    
     const handleSymbolInsert = useCallback((symbol: string) => {
         const token = `{${symbol}}`;
         const activeElement = document.activeElement;
-
         if (activeElement && (activeElement.tagName.toLowerCase() === 'textarea' || activeElement.tagName.toLowerCase() === 'input')) {
             const field = activeElement as HTMLTextAreaElement | HTMLInputElement;
             const start = field.selectionStart ?? 0;
             const end = field.selectionEnd ?? 0;
-            const currentValue = field.value;
-            const newValue = currentValue.slice(0, start) + token + currentValue.slice(end);
-            
             const fieldName = field.id as keyof CardData;
-            if (fieldName && cardData.hasOwnProperty(fieldName)) {
-                 setCardData(prev => ({...prev, [fieldName]: newValue}));
-            }
 
-            requestAnimationFrame(() => {
-                field.focus();
-                const newCursorPos = start + token.length;
-                field.setSelectionRange(newCursorPos, newCursorPos);
-            });
+            if (fieldName && cardData.hasOwnProperty(fieldName)) {
+                const currentValue = cardData[fieldName] as string;
+                const newValue = currentValue.slice(0, start) + token + currentValue.slice(end);
+                setCardData({ [fieldName]: newValue });
+                
+                requestAnimationFrame(() => {
+                    field.focus();
+                    const newCursorPos = start + token.length;
+                    field.setSelectionRange(newCursorPos, newCursorPos);
+                });
+            }
         } else {
              navigator.clipboard.writeText(token);
         }
-    }, [cardData]);
-
-    const handleLoginSuccess = (newToken: string) => {
-        localStorage.setItem('accessToken', newToken);
-        setToken(newToken);
-    };
-
-    const handleLogout = () => {
-        localStorage.removeItem('accessToken');
-        setToken(null);
-        setArtAssets([]);
-        setCustomSetSymbols([]);
-        setTemplates([]);
-        setEditingCardInfo(null);
-    };
-
-    const handleArtUpdate = (originalUrl: string, croppedUrl: string) => {
-        setCardData(prev => ({ ...prev, art: { original: originalUrl, cropped: croppedUrl } }));
-        assetService.addArtAsset(croppedUrl)
-            .then(newAsset => setArtAssets(prev => [newAsset, ...prev]))
-            .catch(error => alert("Chyba: Nepodařilo se nahrát obrázek do knihovny."));
-    };
-
-    const handleAddCustomSetSymbol = async (name: string, dataUrl: string) => {
-        const newSymbol = await assetService.addCustomSetSymbol(name, dataUrl);
-        setCustomSetSymbols(prev => [...prev, newSymbol]);
-        setCardData(prev => ({ ...prev, setSymbolUrl: newSymbol.url }));
-    };
-
-    const handleSaveTemplates = async (templatesFromEditor: Template[]) => {
-        if (currentUserId === null) {
-            alert("Chyba: Nelze ověřit přihlášeného uživatele. Ukládání zrušeno.");
-            return;
-        }
-        try {
-            const savePromises = templatesFromEditor.map(template => {
-                const { id, authorUsername, ...templateData } = template;
-                if (typeof id === 'string' && id.startsWith('new-')) {
-                    return assetService.createTemplate({ ...templateData, user_id: currentUserId } as Omit<Template, 'id' | 'authorUsername'>);
-                } else if (template.user_id === currentUserId) {
-                    return assetService.updateTemplate(template);
-                }
-                return null;
-            }).filter(Boolean);
-
-            if (savePromises.length > 0) {
-                await Promise.all(savePromises as Promise<Template>[]);
-            }
-            
-            const allUpdatedTemplates = await assetService.getTemplates();
-            setTemplates(allUpdatedTemplates);
-
-            if (!allUpdatedTemplates.some(t => t.id === cardData.templateId)) {
-                setCardData(prev => ({ ...prev, templateId: allUpdatedTemplates[0]?.id || '' }));
-            }
-            alert("Vaše šablony byly úspěšně uloženy!");
-        } catch (error) {
-            console.error("Failed to save templates:", error);
-            alert(`Chyba při ukládání šablon: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    };
-
-    const handleDeleteTemplate = async (templateId: string) => {
-        try {
-            await assetService.deleteTemplate(templateId);
-            const remainingTemplates = templates.filter(t => t.id !== templateId);
-            setTemplates(remainingTemplates);
-            if (cardData.templateId === templateId) {
-                setCardData(prev => ({ ...prev, templateId: remainingTemplates[0]?.id || '' }));
-            }
-            alert("Šablona byla úspěšně smazána.");
-        } catch (error) {
-            console.error("Failed to delete template:", error);
-            alert(`Chyba při mazání šablony: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    };
+    }, [cardData, setCardData]);
 
     const handleDownload = useCallback(() => {
         if (!cardPreviewRef.current) return;
@@ -221,48 +111,18 @@ const App: React.FC = () => {
             .catch((err) => console.error('oops, something went wrong!', err));
     }, [cardPreviewRef, cardData.name]);
 
-    const handleReset = () => {
-        setCardData(DEFAULT_CARD_DATA);
-        setEditingCardInfo(null);
-    };
-
-    const handleDecksUpdated = () => {};
-    
-    const handleEditCard = (cardToEdit: SavedCard) => {
-        setCardData(cardToEdit.card_data);
-        setEditingCardInfo({ cardId: cardToEdit.id, deckId: cardToEdit.deck_id });
-        setDeckManagerOpen(false);
-    };
-
-    const handleUpdateCard = async () => {
-        if (!editingCardInfo || !selectedTemplate) return;
-        try {
-            await assetService.updateCardInDeck(editingCardInfo.deckId, editingCardInfo.cardId, cardData, selectedTemplate);
-            alert("Karta byla úspěšně aktualizována!");
-            setEditingCardInfo(null);
-        } catch (error) {
-            alert(`Chyba při aktualizaci karty: ${error}`);
-        }
-    };
-    
-    const selectedTemplate = templates.find(t => t.id === cardData.templateId);
-    
-    if (!token) { return <Auth onLoginSuccess={handleLoginSuccess} />; }
+    if (!token) { return <Auth onLoginSuccess={login} />; }
     if (isLoading) { return <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-beleren text-2xl">Načítání...</div>; }
     if (error) { return <div className="min-h-screen bg-gray-900 text-red-500 flex items-center justify-center text-xl">{error}</div>; }
     if (!selectedTemplate) {
-        if (templates.length > 0) {
-            setCardData(prev => ({ ...prev, templateId: templates[0].id }));
-            return null;
-        }
-        return <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-beleren text-2xl">Žádné šablony nebyly nalezeny.</div>;
+        return <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-beleren text-2xl">Žádné šablony nebyly nalezeny. Vytvořte nějakou v editoru.</div>;
     }
 
     return (
         <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans relative">
             <div className="absolute top-4 right-4 flex flex-wrap gap-2 md:gap-4 z-20">
-                <button onClick={() => setDeckManagerOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Moje balíčky</button>
-                <button onClick={handleLogout} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Odhlásit</button>
+                <button onClick={openDeckManager} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Moje balíčky</button>
+                <button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Odhlásit</button>
             </div>
 
             <header className="w-full max-w-7xl text-center mb-6 pt-16 md:pt-0">
@@ -275,17 +135,7 @@ const App: React.FC = () => {
                     style={{ width: `${editorWidth}px` }} 
                     className="flex-shrink-0 bg-gray-800 p-6 rounded-l-2xl shadow-2xl border-l border-t border-b border-gray-700 overflow-y-auto"
                 >
-                    <EditorPanel 
-                        cardData={cardData} 
-                        setCardData={setCardData} 
-                        templates={templates}
-                        onOpenTemplateEditor={() => setTemplateEditorOpen(true)}
-                        artAssets={artAssets}
-                        onArtUpdate={handleArtUpdate}
-                        customSetSymbols={customSetSymbols}
-                        onAddCustomSetSymbol={handleAddCustomSetSymbol}
-                        template={selectedTemplate}
-                    />
+                    <EditorPanel />
                 </div>
 
                 <div className="w-2 flex-shrink-0 cursor-col-resize bg-gray-700 hover:bg-yellow-400 transition-colors duration-200" onMouseDown={handleMouseDown}/>
@@ -297,14 +147,20 @@ const App: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
                         {editingCardInfo ? (
                             <>
-                                <button onClick={handleUpdateCard} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold transition order-1">Uložit změny</button>
-                                <button onClick={() => setAddToDeckModalOpen(true)} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-2">Uložit jako kopii</button>
+                                <button 
+                                    onClick={updateCardInDeck} 
+                                    disabled={isCardUpdateLoading}
+                                    className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold transition order-1 disabled:bg-gray-500 disabled:cursor-wait"
+                                >
+                                    {isCardUpdateLoading ? 'Ukládám...' : 'Uložit změny'}
+                                </button>
+                                <button onClick={openAddToDeckModal} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-2">Uložit jako kopii</button>
                             </>
                         ) : (
-                            <button onClick={() => setAddToDeckModalOpen(true)} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-1">Uložit do balíčku</button>
+                            <button onClick={openAddToDeckModal} className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-700 text-white font-bold transition order-1">Uložit do balíčku</button>
                         )}
                         <button onClick={handleDownload} className="py-2 px-6 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold transition order-3">Exportovat PNG</button>
-                        <button onClick={handleReset} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 text-white font-bold transition order-4">Resetovat kartu</button>
+                        <button onClick={resetCard} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 text-white font-bold transition order-4">Resetovat kartu</button>
                     </div>
                 </div>
                 
@@ -313,9 +169,9 @@ const App: React.FC = () => {
                 </div>
             </main>
 
-            {isTemplateEditorOpen && <TemplateEditor templates={templates} onSave={handleSaveTemplates} onClose={() => setTemplateEditorOpen(false)} currentUserId={currentUserId} onDelete={handleDeleteTemplate}/>}
-            {isAddToDeckModalOpen && <AddToDeckModal cardData={cardData} template={selectedTemplate} onClose={() => setAddToDeckModalOpen(false)} onDecksUpdated={handleDecksUpdated}/>}
-            {isDeckManagerOpen && <DeckManager onClose={() => setDeckManagerOpen(false)} onEditCard={handleEditCard}/>}
+            {isTemplateEditorOpen && <TemplateEditor templates={templates} onSave={saveTemplates} onClose={closeTemplateEditor} currentUserId={userId} onDelete={deleteTemplate}/>}
+            {isAddToDeckModalOpen && <AddToDeckModal cardData={cardData} template={selectedTemplate} onClose={closeAddToDeckModal} onDecksUpdated={() => {}}/>}
+            {isDeckManagerOpen && <DeckManager onClose={closeDeckManager} onEditCard={editCard}/>}
         </div>
     );
 };

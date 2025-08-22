@@ -1,64 +1,50 @@
 import React, { useRef } from "react";
-import {
-  CardData,
-  CardType,
-  Rarity,
-  Template,
-  ArtAsset,
-  CustomSetSymbol,
-  CardArt,
-} from "../types";
+import { CardData, CardType, Rarity, CardArt } from "../types";
 import { SET_SYMBOLS } from "../constants";
 import ArtEditor from "./ArtEditor";
 
-interface EditorPanelProps {
-  cardData: CardData;
-  setCardData: React.Dispatch<React.SetStateAction<CardData>>;
-  templates: Template[];
-  onOpenTemplateEditor: () => void;
-  artAssets: ArtAsset[];
-  onArtUpdate: (originalUrl: string, croppedUrl: string) => void;
-  customSetSymbols: CustomSetSymbol[];
-  onAddCustomSetSymbol: (name: string, dataUrl: string) => void;
-  template: Template;
-}
-// Poznámka: `onSymbolInsert` prop již není potřeba, protože se logika přesunula do App.tsx
-// a je nezávislá na této komponentě.
+// Importujeme naše Zustand stores
+import { useAppStore } from '../store/appStore';
+import { useUiStore } from '../store/uiStore';
 
-const EditorPanel: React.FC<EditorPanelProps> = (props) => {
-  const {
-    cardData,
-    setCardData,
+// Props interface již není potřeba, protože komponenta si vše bere ze store.
+// interface EditorPanelProps { ... }
+
+const EditorPanel: React.FC = () => {
+  const { 
+    cardData, 
+    setCardData, // Změna: Potřebujeme jen setCardData, ne celouhandleChange funkci
     templates,
-    onOpenTemplateEditor,
     artAssets,
-    onArtUpdate,
+    updateArt, // Potřebujeme akci pro onArtUpdate
     customSetSymbols,
-    onAddCustomSetSymbol,
-    template,
-  } = props;
+    addCustomSetSymbol 
+  } = useAppStore();
+
+  const openTemplateEditor = useUiStore(state => state.openTemplateEditor);
+  
+  // Najdeme si aktuálně vybranou šablonu. 
+  // Tato logika je nyní uvnitř komponenty, místo aby byla předávána jako prop.
+   const selectedTemplate = templates.find(t => t.id === cardData.templateId);
+
   const customSymbolInputRef = useRef<HTMLInputElement>(null);
 
-  const handleChange = <K extends keyof CardData>(
-    key: K,
-    value: CardData[K]
-  ) => {
-    setCardData((prev) => ({ ...prev, [key]: value }));
+  // Tato pomocná funkce zůstává, je stále užitečná
+  const handleChange = <K extends keyof CardData>(key: K, value: CardData[K]) => {
+    setCardData({ [key]: value });
   };
 
-  const handleCustomSymbolUpload = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleCustomSymbolUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       const name = prompt(
-        "Enter a name for this set symbol:",
+        "Zadejte název pro tento symbol sady:",
         file.name.replace(/\.[^/.]+$/, "")
       );
       if (name) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          onAddCustomSetSymbol(name, e.target?.result as string);
+          addCustomSetSymbol(name, e.target?.result as string);
         };
         reader.readAsDataURL(file);
       }
@@ -75,6 +61,11 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
     event.stopPropagation();
   };
 
+  // Failsafe pro případ, že by šablona ještě nebyla načtená.
+ if (!selectedTemplate) {
+    return <div className="text-gray-400">Načítání šablony...</div>;
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-beleren text-yellow-200 border-b-2 border-yellow-200/20 pb-2">
@@ -83,13 +74,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
-          id="name" // << ZMĚNA ZDE
+          id="name"
           label="Name"
           value={cardData.name}
           onChange={(e) => handleChange("name", e.target.value)}
         />
         <Input
-          id="manaCost" // << ZMĚNA ZDE
+          id="manaCost"
           label="Mana Cost"
           value={cardData.manaCost}
           onChange={(e) => handleChange("manaCost", e.target.value)}
@@ -99,10 +90,9 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
 
       <ArtEditor
         art={cardData.art}
-        setArt={(art: CardArt) => handleChange("art", art)}
         artAssets={artAssets}
-        onArtUpdate={onArtUpdate}
-        aspectRatio={template.elements.art.width / template.elements.art.height}
+        onArtUpdate={updateArt}
+        aspectRatio={selectedTemplate.elements.art.width / selectedTemplate.elements.art.height}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -118,7 +108,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
           ))}
         </Select>
         <Input
-          id="subtype" // << ZMĚNA ZDE
+          id="subtype"
           label="Subtype"
           value={cardData.subtype}
           onChange={(e) => handleChange("subtype", e.target.value)}
@@ -127,7 +117,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       </div>
 
       <Textarea
-        id="rulesText" // << ZMĚNA ZDE
+        id="rulesText"
         label="Rules Text"
         value={cardData.rulesText}
         onChange={(e) => handleChange("rulesText", e.target.value)}
@@ -136,7 +126,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       />
       
       <Textarea
-        id="flavorText" // << ZMĚNA ZDE
+        id="flavorText"
         label="Flavor Text"
         value={cardData.flavorText}
         onChange={(e) => handleChange("flavorText", e.target.value)}
@@ -146,13 +136,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
       {cardData.cardType === CardType.Creature && (
         <div className="grid grid-cols-2 gap-4">
           <Input
-            id="power" // << ZMĚNA ZDE
+            id="power"
             label="Power"
             value={cardData.power}
             onChange={(e) => handleChange("power", e.target.value)}
           />
           <Input
-            id="toughness" // << ZMĚNA ZDE
+            id="toughness"
             label="Toughness"
             value={cardData.toughness}
             onChange={(e) => handleChange("toughness", e.target.value)}
@@ -206,13 +196,13 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
-          id="artist" // << ZMĚNA ZDE
+          id="artist"
           label="Artist"
           value={cardData.artist}
           onChange={(e) => handleChange("artist", e.target.value)}
         />
         <Input
-          id="collectorNumber" // << ZMĚNA ZDE
+          id="collectorNumber"
           label="Collector #"
           value={cardData.collectorNumber}
           onChange={(e) => handleChange("collectorNumber", e.target.value)}
@@ -236,7 +226,7 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
             ))}
           </select>
           <button
-            onClick={onOpenTemplateEditor}
+            onClick={openTemplateEditor} // Používáme akci ze store
             className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition text-center"
           >
             Manage
@@ -247,16 +237,20 @@ const EditorPanel: React.FC<EditorPanelProps> = (props) => {
   );
 };
 
-// ======================= ZMĚNA ZDE: Přidání `id` do props =======================
+
+// Komponenty Input, Textarea, a Select zůstávají beze změny.
+// Jsou to jednoduché "presentational" komponenty, které nepotřebují
+// přímý přístup ke globálnímu stavu.
+
 const Input: React.FC<
   React.InputHTMLAttributes<HTMLInputElement> & { label: string; id: string }
 > = ({ label, id, ...props }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-300 mb-1">
+    <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-1">
       {label}
     </label>
     <input
-      id={id} // <-- id se nyní předává inputu
+      id={id}
       {...props}
       className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
     />
@@ -265,17 +259,17 @@ const Input: React.FC<
 
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string;
-  id: string; // <-- přidáno id
+  id: string;
 };
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, id, ...props }, ref) => (
     <div>
-      <label className="block text-sm font-medium text-gray-300 mb-1">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-1">
         {label}
       </label>
       <textarea
-        id={id} // <-- id se nyní předává textarea
+        id={id}
         {...props}
         ref={ref}
         className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"

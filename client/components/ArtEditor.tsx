@@ -1,37 +1,37 @@
-import React, { useState, useCallback } from 'react';
-import { generateArt, ApiProvider } from '../services/aiArtService'; // << ZMĚNA IMPORTU
+import React, { useState } from 'react';
+import { generateArt, ApiProvider } from '../services/aiArtService';
 import ArtCropper from './ArtCropper';
 import AssetLibrary from './AssetLibrary';
-import { ArtAsset, CardArt } from '../types';
+import { ArtAsset, CardArt } from '../types'; // Přidáme import typů
 import imageCompression from 'browser-image-compression';
 
+// Props se vrací zpět!
 interface ArtEditorProps {
-    art: CardArt;
-    setArt: (art: CardArt) => void;
+    art: CardArt | undefined; // Může být undefined
     artAssets: ArtAsset[];
     onArtUpdate: (originalUrl: string, croppedUrl: string) => void;
     aspectRatio: number;
 }
 
 const ArtEditor: React.FC<ArtEditorProps> = ({ art, artAssets, onArtUpdate, aspectRatio }) => {
+    // Lokální stavy zůstávají
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
     const [croppingImageUrl, setCroppingImageUrl] = useState<string | null>(null);
-
-    // Stavy pro AI generování
     const [aiPrompt, setAiPrompt] = useState('');
-    const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini'); // << NOVÝ STAV
+    const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        // ... (tato funkce zůstává beze změny)
         const file = event.target.files?.[0];
         if (file) {
             const options = {
                 maxSizeMB: 0.5,
                 maxWidthOrHeight: 800,
                 useWebWorker: true
-            }
+            };
             try {
                 const compressedFile = await imageCompression(file, options);
                 const reader = new FileReader();
@@ -51,11 +51,11 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, artAssets, onArtUpdate, aspe
     };
 
     const handleGenerateArt = async () => {
+        // ... (tato funkce zůstává beze změny)
         if (!aiPrompt) return;
         setIsLoading(true);
         setError(null);
         try {
-            // Použijeme novou službu s vybraným providerem
             const generatedImageUrl = await generateArt(aiPrompt, apiProvider);
             setCroppingImageUrl(generatedImageUrl);
             setIsAiModalOpen(false);
@@ -66,12 +66,28 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, artAssets, onArtUpdate, aspe
         }
     };
     
-     const handleCropComplete = (croppedDataUrl: string) => {
+    // Nyní voláme onArtUpdate z props, ne ze store
+    const handleCropComplete = (croppedDataUrl: string) => {
         if (croppingImageUrl) {
             onArtUpdate(croppingImageUrl, croppedDataUrl);
         }
         setCroppingImageUrl(null);
     };
+    
+    // "Loading skeleton", pokud `art` není definován
+    if (!art) {
+        return (
+            <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Card Art</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-pulse">
+                    <div className="h-10 bg-gray-600 rounded-md"></div>
+                    <div className="h-10 bg-gray-600 rounded-md"></div>
+                    <div className="h-10 bg-gray-600 rounded-md"></div>
+                    <div className="h-10 bg-gray-600 rounded-md"></div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
@@ -120,7 +136,6 @@ const ArtEditor: React.FC<ArtEditorProps> = ({ art, artAssets, onArtUpdate, aspe
                     <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700 flex flex-col">
                         <h3 className="text-xl font-beleren text-yellow-300 mb-4">Generovat obrázek pomocí AI</h3>
                         
-                        {/* --- NOVÝ VÝBĚR API --- */}
                         <fieldset className="mb-4">
                             <legend className="block text-sm font-medium text-gray-300 mb-2">Vyberte službu</legend>
                             <div className="flex gap-4">

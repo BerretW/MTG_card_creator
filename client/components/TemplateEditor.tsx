@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Template, TemplateElement, FontProperties } from '../types';
 import DraggableResizableBox from './DraggableResizableBox';
 import { AVAILABLE_FONTS, DEFAULT_TEMPLATES } from '../constants';
+import { useAppStore } from '../store/appStore';
 
 interface TemplateEditorProps {
     templates: Template[];
@@ -15,6 +16,7 @@ type ElementKey = keyof Template['elements'];
 type FontKey = keyof Template['fonts'];
 
 const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTemplates, onSave, onClose, currentUserId, onDelete }) => {
+    const isTemplateActionLoading = useAppStore(state => state.isTemplateActionLoading);
     const [templates, setTemplates] = useState<Template[]>(() => JSON.parse(JSON.stringify(initialTemplates)));
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(templates[0]?.id || null);
     const [selectedElementKey, setSelectedElementKey] = useState<ElementKey | null>(null);
@@ -77,7 +79,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
     
     const handleUpdateFont = (key: FontKey, newFontProps: Partial<FontProperties>) => {
         if (!activeTemplate) return;
-        const updatedTemplate = { ...activeTemplate, fonts: { ...activeTemplate.fonts, [key]: { ...activeTemplate.fonts, [key]: { ...activeTemplate.fonts[key], ...newFontProps } } } };
+        const updatedTemplate = { ...activeTemplate, fonts: { ...activeTemplate.fonts, [key]: { ...activeTemplate.fonts[key], ...newFontProps } } };
         handleUpdateTemplate(updatedTemplate);
     };
 
@@ -128,11 +130,11 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
     
     const handleResetGradient = () => {
         if (!activeTemplate) return;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { gradientStartColor, gradientEndColor, gradientAngle, gradientOpacity, ...rest } = activeTemplate;
         handleUpdateTemplate(rest as Template);
     };
 
-    // ======================= ZMĚNA ZDE: Nová funkce pro vlastnosti šablony =======================
     const renderTemplateProperties = () => {
         if (!activeTemplate) return null;
         const isAuthorOfActive = activeTemplate.user_id === currentUserId;
@@ -178,7 +180,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         );
     };
 
-    // ======================= ZMĚNA ZDE: Nová funkce pro vlastnosti elementu =======================
     const renderElementProperties = () => {
         if (!activeTemplate || !selectedElementKey) return (
             <div className="p-4 text-gray-400">Vyberte element ze seznamu pro úpravu jeho vlastností.</div>
@@ -218,14 +219,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                     {font && fontKey && (
                         <>
                             <p className="font-bold text-gray-400 mt-4">Font</p>
-                            <label>Family: <select value={font.fontFamily} onChange={e => handleFontChange('fontFamily', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600">{AVAILABLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.name}</option>)}</select></label>
+                            <label>Family: <select value={font.fontFamily ?? ''} onChange={e => handleFontChange('fontFamily', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600">{AVAILABLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.name}</option>)}</select></label>
                             <div className="grid grid-cols-2 gap-2">
-                              <label>Size (px): <input type="number" value={font.fontSize} onChange={e => handleFontChange('fontSize', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
-                              <label>Color: <input type="color" value={font.color} onChange={e => handleFontChange('color', e.target.value)} className="w-full bg-gray-700 p-0 h-8 border-gray-600 cursor-pointer" /></label>
+                              <label>Size (px): <input type="number" value={font.fontSize ?? 16} onChange={e => handleFontChange('fontSize', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
+                              <label>Color: <input type="color" value={font.color ?? '#000000'} onChange={e => handleFontChange('color', e.target.value)} className="w-full bg-gray-700 p-0 h-8 border-gray-600 cursor-pointer" /></label>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
-                               <label>Align: <select value={font.textAlign} onChange={e => handleFontChange('textAlign', e.target.value as 'left' | 'center' | 'right')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
-                               <label>Weight: <select value={font.fontWeight || 'normal'} onChange={e => handleFontChange('fontWeight', e.target.value as 'normal' | 'bold')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="normal">Normal</option><option value="bold">Bold</option></select></label>
+                               <label>Align: <select value={font.textAlign ?? 'left'} onChange={e => handleFontChange('textAlign', e.target.value as 'left' | 'center' | 'right')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+                               <label>Weight: <select value={font.fontWeight ?? 'normal'} onChange={e => handleFontChange('fontWeight', e.target.value as 'normal' | 'bold')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="normal">Normal</option><option value="bold">Bold</option></select></label>
                             </div>
                         </>
                     )}
@@ -250,13 +251,24 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                 <header className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <h3 className="text-2xl font-beleren text-yellow-300">Template Editor</h3>
                     <div className="flex items-center gap-4">
-                        <button onClick={handleSaveAndClose} className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700">Uložit & Zavřít</button>
-                        <button onClick={onClose} className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500">Zrušit</button>
+                        <button 
+                            onClick={handleSaveAndClose} 
+                            disabled={isTemplateActionLoading}
+                            className="py-2 px-6 rounded-md bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-wait"
+                        >
+                            {isTemplateActionLoading ? 'Ukládám...' : 'Uložit & Zavřít'}
+                        </button>
+                        <button 
+                            onClick={onClose} 
+                            disabled={isTemplateActionLoading}
+                            className="py-2 px-4 rounded-md bg-gray-600 hover:bg-gray-500 disabled:opacity-50"
+                        >
+                            Zrušit
+                        </button>
                     </div>
                 </header>
                 
                 <div className="flex-grow flex overflow-hidden">
-                    {/* LEVÝ SLOUPEC: Seznam šablon */}
                     <aside className="w-1/4 bg-gray-900/50 p-4 flex flex-col">
                         <div>
                             <div className="flex items-center justify-between mb-2">
@@ -283,20 +295,33 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                         <button onClick={handleAddNewTemplate} className="w-full mt-4 py-2 px-4 rounded-md bg-blue-700 hover:bg-blue-600 text-sm transition-colors flex-shrink-0">+ Přidat novou šablonu</button>
                     </aside>
 
-                    {/* ======================= ZMĚNA ZDE: Prostřední sloupec nyní obsahuje náhled i vlastnosti šablony ======================= */}
                     <main className="w-1/2 flex flex-col p-4 bg-gray-900 border-x border-gray-700 overflow-y-auto">
                         <div className="flex-shrink-0 flex items-center justify-center">
                              {activeTemplate ? (
                                 <div className="w-[375px] h-[525px] rounded-[18px] overflow-hidden shadow-2xl relative select-none bg-black" onClick={() => setSelectedElementKey(null)}>
                                     <img src={activeTemplate.frameImageUrl} alt="Template Frame" className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1, filter: `saturate(${activeTemplate.saturation ?? 1}) hue-rotate(${activeTemplate.hue ?? 0}deg)`}}/>
                                     <div className="absolute inset-0 pointer-events-none" style={{ ...generateMaskedGradientStyle(activeTemplate), zIndex: 2 }}/>
-                                    {(Object.keys(activeTemplate.elements) as ElementKey[]).map(key => (
-                                        (activeTemplate.elements[key].visible ?? true) && (
-                                            <DraggableResizableBox key={key} id={key} position={activeTemplate.elements[key]} onUpdate={(newPos) => { if (activeTemplate.user_id === currentUserId) { handleUpdateElement(key, newPos); }}} isSelected={selectedElementKey === key} onClick={(e) => { e.stopPropagation(); setSelectedElementKey(key); }}>
-                                              <span className="text-xs text-white/50 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                                            </DraggableResizableBox>
+                                    
+                                    {(Object.keys(activeTemplate.elements) as ElementKey[]).map(key => {
+                                        const fontKey = getFontKeyFromElement(key);
+                                        const fontStyle = fontKey ? activeTemplate.fonts[fontKey] : undefined;
+
+                                        return (
+                                            (activeTemplate.elements[key].visible ?? true) && (
+                                                <DraggableResizableBox 
+                                                    key={key} 
+                                                    id={key} 
+                                                    position={activeTemplate.elements[key]} 
+                                                    onUpdate={(newPos) => { if (activeTemplate.user_id === currentUserId) { handleUpdateElement(key, newPos); }}} 
+                                                    isSelected={selectedElementKey === key} 
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedElementKey(key); }}
+                                                    fontStyle={fontStyle}
+                                                >
+                                                  {key.replace(/([A-Z])/g, ' $1')}
+                                                </DraggableResizableBox>
+                                            )
                                         )
-                                    ))}
+                                    })}
                                 </div>
                             ) : (<div className="text-gray-400">Žádná šablona k zobrazení.</div>)}
                         </div>
@@ -304,25 +329,22 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                             {renderTemplateProperties()}
                         </div>
                     </main>
-                    {/* ============================================================================================================== */}
 
-                    {/* PRAVÝ SLOUPEC: Vlastnosti elementů a rámečku */}
                     <aside className="w-1/4 bg-gray-900/50 flex flex-col overflow-hidden">
                         {activeTemplate ? (
                             <>
-<div className="p-4 flex-shrink-0">
-    <h4 className="text-lg font-bold text-yellow-300 mb-2">Obrázek rámečku</h4>
-    {/* Nový kontejner pro omezení a centrování */}
-    <div className="w-full max-w-[150px] mx-auto"> 
-        <img 
-            src={activeTemplate.frameImageUrl} 
-            alt="Frame Preview" 
-            className="w-full rounded border border-gray-600 my-2 aspect-[375/525] object-contain bg-black" 
-        />
-    </div>
-    <input type="file" accept="image/png, image/jpeg" ref={fileInputRef} className="hidden" onChange={handleFrameImageUpload} />
-    <button onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-4 rounded-md bg-blue-600 hover:bg-blue-700 text-sm transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed" disabled={activeTemplate.user_id !== currentUserId}>Změnit obrázek</button>
-</div>
+                                <div className="p-4 flex-shrink-0">
+                                    <h4 className="text-lg font-bold text-yellow-300 mb-2">Obrázek rámečku</h4>
+                                    <div className="w-full max-w-[150px] mx-auto"> 
+                                        <img 
+                                            src={activeTemplate.frameImageUrl} 
+                                            alt="Frame Preview" 
+                                            className="w-full rounded border border-gray-600 my-2 aspect-[375/525] object-contain bg-black" 
+                                        />
+                                    </div>
+                                    <input type="file" accept="image/png, image/jpeg" ref={fileInputRef} className="hidden" onChange={handleFrameImageUpload} />
+                                    <button onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-4 rounded-md bg-blue-600 hover:bg-blue-700 text-sm transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed" disabled={activeTemplate.user_id !== currentUserId}>Změnit obrázek</button>
+                                </div>
                                 <div className="p-4 border-t border-gray-700 flex-shrink-0">
                                     <h4 className="text-lg font-bold text-yellow-300 mb-2">Elementy</h4>
                                     <div className="grid grid-cols-2 gap-2 text-sm">
