@@ -150,18 +150,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   resetCard: () => set({ cardData: DEFAULT_CARD_DATA, editingCardInfo: null }),
   
-  editCard: (cardToEdit) => {
-    set({
-      cardData: cardToEdit.card_data,
-      editingCardInfo: { cardId: cardToEdit.id, deckId: cardToEdit.deck_id },
-    });
-    // Použijeme 'lazy import' s 'require', abychom předešli problémům s cyklickou závislostí mezi stores.
-    // Dáme to do 'setTimeout', aby se to vykonalo v dalším ticku, až bude vše inicializováno.
-    setTimeout(() => {
-        const { useUiStore } = require('./uiStore'); 
-        useUiStore.getState().closeDeckManager();
-    }, 0);
-  },
+    // --- OPRAVA ZDE ---
+    editCard: (cardToEdit) => {
+        set({
+            cardData: cardToEdit.card_data,
+            editingCardInfo: { cardId: cardToEdit.id, deckId: cardToEdit.deck_id },
+        });
+        // Odstranili jsme volání useUiStore.getState().closeDeckManager()
+    },
   
 updateCardInDeck: async () => {
     set({ isCardUpdateLoading: true }); // <-- ZAČÁTEK NAČÍTÁNÍ

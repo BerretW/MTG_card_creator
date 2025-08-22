@@ -5,6 +5,7 @@ import { toPng } from 'html-to-image';
 import { assetService } from '../services/assetService';
 import { Deck, SavedCard, CardData, Template } from '../types';
 import CardPreview from './CardPreview';
+import { useUiStore } from '../store/uiStore'; // <-- Přidáme import uiStore
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -94,9 +95,14 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
         }
     };
     
+    const closeDeckManager = useUiStore(state => state.closeDeckManager);
+
     const handleStartEdit = () => {
         if (viewingCard) {
             onEditCard(viewingCard);
+            // --- OPRAVA ZDE ---
+            // Po předání karty k editaci zavřeme modální okno.
+            closeDeckManager();
         }
     };
 
@@ -268,24 +274,24 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                     onClick={(e) => e.stopPropagation()}
                 >
                     {viewingCard && (
-                        <div className="relative">
-                            <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
-                            <div className="mt-4 flex justify-center gap-4">
-                                <button 
-                                    onClick={handleStartEdit}
-                                    className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
-                                >
-                                    Upravit tuto kartu
-                                </button>
-                                <button 
-                                    onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
-                                    className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
-                                >
-                                    Odebrat z balíčku
-                                </button>
-                            </div>
+                    <div className="relative">
+                        <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
+                        <div className="mt-4 flex justify-center gap-4">
+                            <button 
+                                onClick={handleStartEdit} // <-- Volá se opravená funkce
+                                className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
+                            >
+                                Upravit tuto kartu
+                            </button>
+                            <button 
+                                onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
+                                className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
+                            >
+                                Odebrat z balíčku
+                            </button>
                         </div>
-                    )}
+                    </div>
+                )}
                 </div>
             </div>
         </>

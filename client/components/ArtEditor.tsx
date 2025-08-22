@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { generateArt, ApiProvider } from '../services/aiArtService';
+import { generateArt, ApiProvider } from '../services/aiService';
 import ArtCropper from './ArtCropper';
 import AssetLibrary from './AssetLibrary';
 import { ArtAsset, CardArt } from '../types'; // Přidáme import typů
