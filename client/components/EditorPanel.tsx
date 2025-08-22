@@ -3,36 +3,24 @@ import { CardData, CardType, Rarity, CardArt } from "../types";
 import { SET_SYMBOLS } from "../constants";
 import ArtEditor from "./ArtEditor";
 
-// Importujeme naše Zustand stores
 import { useAppStore } from '../store/appStore';
 import { useUiStore } from '../store/uiStore';
-
-// Props interface již není potřeba, protože komponenta si vše bere ze store.
-// interface EditorPanelProps { ... }
 
 const EditorPanel: React.FC = () => {
   const { 
     cardData, 
-    setCardData, // Změna: Potřebujeme jen setCardData, ne celouhandleChange funkci
+    setCardData,
     templates,
     artAssets,
-    updateArt, // Potřebujeme akci pro onArtUpdate
+    updateArt,
     customSetSymbols,
     addCustomSetSymbol 
   } = useAppStore();
 
   const openTemplateEditor = useUiStore(state => state.openTemplateEditor);
   
-  // Najdeme si aktuálně vybranou šablonu. 
-  // Tato logika je nyní uvnitř komponenty, místo aby byla předávána jako prop.
-   const selectedTemplate = templates.find(t => t.id === cardData.templateId);
-
+  const selectedTemplate = templates.find(t => t.id === cardData.templateId);
   const customSymbolInputRef = useRef<HTMLInputElement>(null);
-
-  // Tato pomocná funkce zůstává, je stále užitečná
-  const handleChange = <K extends keyof CardData>(key: K, value: CardData[K]) => {
-    setCardData({ [key]: value });
-  };
 
   const handleCustomSymbolUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -52,6 +40,15 @@ const EditorPanel: React.FC = () => {
     if (event.target) event.target.value = "";
   };
 
+  const handleCustomFieldChange = (key: string, value: string) => {
+    setCardData({
+        customFields: {
+            ...(cardData.customFields || {}),
+            [key]: value,
+        }
+    });
+  };
+
   const allSetSymbols = [
     ...Object.values(SET_SYMBOLS),
     ...customSetSymbols.map((s) => ({ name: s.name, url: s.url })),
@@ -61,8 +58,7 @@ const EditorPanel: React.FC = () => {
     event.stopPropagation();
   };
 
-  // Failsafe pro případ, že by šablona ještě nebyla načtená.
- if (!selectedTemplate) {
+  if (!selectedTemplate) {
     return <div className="text-gray-400">Načítání šablony...</div>;
   }
 
@@ -77,13 +73,13 @@ const EditorPanel: React.FC = () => {
           id="name"
           label="Name"
           value={cardData.name}
-          onChange={(e) => handleChange("name", e.target.value)}
+          onChange={(e) => setCardData({ name: e.target.value })}
         />
         <Input
           id="manaCost"
           label="Mana Cost"
           value={cardData.manaCost}
-          onChange={(e) => handleChange("manaCost", e.target.value)}
+          onChange={(e) => setCardData({ manaCost: e.target.value })}
           placeholder="{2}{W}{U}"
         />
       </div>
@@ -99,7 +95,7 @@ const EditorPanel: React.FC = () => {
         <Select
           label="Card Type"
           value={cardData.cardType}
-          onChange={(e) => handleChange("cardType", e.target.value as CardType)}
+          onChange={(e) => setCardData({ cardType: e.target.value as CardType })}
         >
           {Object.values(CardType).map((type) => (
             <option key={type} value={type}>
@@ -111,16 +107,32 @@ const EditorPanel: React.FC = () => {
           id="subtype"
           label="Subtype"
           value={cardData.subtype}
-          onChange={(e) => handleChange("subtype", e.target.value)}
+          onChange={(e) => setCardData({ subtype: e.target.value })}
           placeholder="Elf Druid"
         />
       </div>
+
+      {/* --- ZDE JE NOVÁ LOGIKA PRO VLASTNÍ POLE --- */}
+      {selectedTemplate.elements.customElements && selectedTemplate.elements.customElements.length > 0 && (
+          <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-600 space-y-4">
+              <h3 className="text-lg font-beleren text-yellow-100">Doplňující pole</h3>
+              {selectedTemplate.elements.customElements.map(el => (
+                  <Input
+                      key={el.key}
+                      id={el.key}
+                      label={el.label}
+                      value={cardData.customFields?.[el.key] ?? ''}
+                      onChange={(e) => handleCustomFieldChange(el.key, e.target.value)}
+                  />
+              ))}
+          </div>
+      )}
 
       <Textarea
         id="rulesText"
         label="Rules Text"
         value={cardData.rulesText}
-        onChange={(e) => handleChange("rulesText", e.target.value)}
+        onChange={(e) => setCardData({ rulesText: e.target.value })}
         rows={4}
         onWheel={handleTextareaScroll}
       />
@@ -129,7 +141,7 @@ const EditorPanel: React.FC = () => {
         id="flavorText"
         label="Flavor Text"
         value={cardData.flavorText}
-        onChange={(e) => handleChange("flavorText", e.target.value)}
+        onChange={(e) => setCardData({ flavorText: e.target.value })}
         rows={2}
       />
 
@@ -139,13 +151,13 @@ const EditorPanel: React.FC = () => {
             id="power"
             label="Power"
             value={cardData.power}
-            onChange={(e) => handleChange("power", e.target.value)}
+            onChange={(e) => setCardData({ power: e.target.value })}
           />
           <Input
             id="toughness"
             label="Toughness"
             value={cardData.toughness}
-            onChange={(e) => handleChange("toughness", e.target.value)}
+            onChange={(e) => setCardData({ toughness: e.target.value })}
           />
         </div>
       )}
@@ -153,7 +165,7 @@ const EditorPanel: React.FC = () => {
       <Select
         label="Rarity"
         value={cardData.rarity}
-        onChange={(e) => handleChange("rarity", e.target.value as Rarity)}
+        onChange={(e) => setCardData({ rarity: e.target.value as Rarity })}
       >
         {Object.values(Rarity).map((rarity) => (
           <option key={rarity} value={rarity}>
@@ -169,7 +181,7 @@ const EditorPanel: React.FC = () => {
         <div className="flex gap-2">
           <select
             value={cardData.setSymbolUrl}
-            onChange={(e) => handleChange("setSymbolUrl", e.target.value)}
+            onChange={(e) => setCardData({ setSymbolUrl: e.target.value })}
             className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
           >
             {allSetSymbols.map((symbol) => (
@@ -199,13 +211,13 @@ const EditorPanel: React.FC = () => {
           id="artist"
           label="Artist"
           value={cardData.artist}
-          onChange={(e) => handleChange("artist", e.target.value)}
+          onChange={(e) => setCardData({ artist: e.target.value })}
         />
         <Input
           id="collectorNumber"
           label="Collector #"
           value={cardData.collectorNumber}
-          onChange={(e) => handleChange("collectorNumber", e.target.value)}
+          onChange={(e) => setCardData({ collectorNumber: e.target.value })}
         />
       </div>
 
@@ -216,7 +228,7 @@ const EditorPanel: React.FC = () => {
         <div className="flex gap-2">
           <select
             value={cardData.templateId}
-            onChange={(e) => handleChange("templateId", e.target.value)}
+            onChange={(e) => setCardData({ templateId: e.target.value })}
             className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
           >
             {templates.map((template) => (
@@ -226,7 +238,7 @@ const EditorPanel: React.FC = () => {
             ))}
           </select>
           <button
-            onClick={openTemplateEditor} // Používáme akci ze store
+            onClick={openTemplateEditor}
             className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition text-center"
           >
             Manage
@@ -236,11 +248,6 @@ const EditorPanel: React.FC = () => {
     </div>
   );
 };
-
-
-// Komponenty Input, Textarea, a Select zůstávají beze změny.
-// Jsou to jednoduché "presentational" komponenty, které nepotřebují
-// přímý přístup ke globálnímu stavu.
 
 const Input: React.FC<
   React.InputHTMLAttributes<HTMLInputElement> & { label: string; id: string }

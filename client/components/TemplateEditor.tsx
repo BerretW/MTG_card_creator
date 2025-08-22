@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Template, TemplateElement, FontProperties } from '../types';
+import { Template, TemplateElement, FontProperties, CustomTemplateElement } from '../types';
 import DraggableResizableBox from './DraggableResizableBox';
 import { AVAILABLE_FONTS, DEFAULT_TEMPLATES } from '../constants';
 import { useAppStore } from '../store/appStore';
@@ -12,7 +12,7 @@ interface TemplateEditorProps {
     onDelete: (templateId: string) => void;
 }
 
-type ElementKey = keyof Template['elements'];
+type ElementKey = keyof Template['elements'] | string;
 type FontKey = keyof Template['fonts'];
 
 const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTemplates, onSave, onClose, currentUserId, onDelete }) => {
@@ -73,8 +73,22 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
 
     const handleUpdateElement = (key: ElementKey, newPosition: TemplateElement) => {
         if (!activeTemplate) return;
-        const updatedTemplate = { ...activeTemplate, elements: { ...activeTemplate.elements, [key]: newPosition } };
-        handleUpdateTemplate(updatedTemplate);
+        
+        if (Object.keys(activeTemplate.elements).includes(key)) {
+            const updatedTemplate = { ...activeTemplate, elements: { ...activeTemplate.elements, [key]: newPosition } };
+            handleUpdateTemplate(updatedTemplate);
+        } else {
+            const updatedCustoms = activeTemplate.elements.customElements?.map(el => 
+                el.key === key ? { ...el, position: newPosition } : el
+            );
+            handleUpdateTemplate({ 
+                ...activeTemplate, 
+                elements: {
+                    ...activeTemplate.elements,
+                    customElements: updatedCustoms 
+                }
+            });
+        }
     };
     
     const handleUpdateFont = (key: FontKey, newFontProps: Partial<FontProperties>) => {
@@ -118,14 +132,76 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         }
     };
 
+    const handleAddCustomElement = () => {
+        if (!activeTemplate) return;
+
+        const key = prompt("Zadejte unikátní klíč (bez diakritiky, např. 'loyalty'):");
+        if (!key || !/^[a-zA-Z0-9_]+$/.test(key) || activeTemplate.fonts[key] || Object.keys(activeTemplate.elements).includes(key)) {
+            alert("Neplatný nebo již existující klíč!");
+            return;
+        }
+        const label = prompt("Zadejte zobrazovaný název (např. 'Loyalty'):", key);
+        if (!label) return;
+
+        const newElement: CustomTemplateElement = {
+            key,
+            label,
+            position: { x: 40, y: 85, width: 20, height: 8, visible: true },
+            fontKey: key,
+        };
+
+        const newFonts = {
+            ...activeTemplate.fonts,
+            [key]: { ...(activeTemplate.fonts.pt || {}), color: '#FFFFFF' }
+        };
+        
+        const updatedTemplate = {
+            ...activeTemplate,
+            elements: {
+                ...activeTemplate.elements,
+                customElements: [...(activeTemplate.elements.customElements || []), newElement],
+            },
+            fonts: newFonts
+        };
+        handleUpdateTemplate(updatedTemplate);
+    };
+
+    const handleDeleteCustomElement = (keyToDelete: string) => {
+        if (!activeTemplate || !window.confirm(`Opravdu smazat element "${keyToDelete}"?`)) return;
+
+        const updatedCustomElements = activeTemplate.elements.customElements?.filter(el => el.key !== keyToDelete);
+        
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { [keyToDelete]: _, ...remainingFonts } = activeTemplate.fonts;
+
+        handleUpdateTemplate({
+            ...activeTemplate,
+            elements: {
+                ...activeTemplate.elements,
+                customElements: updatedCustomElements,
+            },
+            fonts: remainingFonts
+        });
+
+        if (selectedElementKey === keyToDelete) {
+            setSelectedElementKey(null);
+        }
+    };
+
+
     const handleSaveAndClose = () => onSave(templates);
     
     const getFontKeyFromElement = (elementKey: ElementKey): FontKey | null => {
-        const keyMap: Partial<Record<ElementKey, FontKey>> = {
-            title: 'title', typeLine: 'typeLine', textBox: 'rulesText',
-            ptBox: 'pt', artist: 'artist', collectorNumber: 'collectorNumber',
-        };
-        return keyMap[elementKey] || null;
+        if (!activeTemplate) return null;
+        if (Object.keys(activeTemplate.elements).includes(elementKey)) {
+             const keyMap: Partial<Record<keyof Template['elements'], FontKey>> = {
+                title: 'title', typeLine: 'typeLine', textBox: 'rulesText',
+                ptBox: 'pt', artist: 'artist', collectorNumber: 'collectorNumber',
+            };
+            return keyMap[elementKey as keyof Template['elements']] || null;
+        }
+        const customEl = activeTemplate.elements.customElements?.find(el => el.key === elementKey);
+        return customEl?.fontKey || null;
     };
     
     const handleResetGradient = () => {
@@ -180,15 +256,40 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         );
     };
 
+
+        const handleCustomElementPropertyChange = (key: string, prop: keyof CustomTemplateElement, value: any) => {
+        if (!activeTemplate) return;
+        const updatedCustoms = activeTemplate.elements.customElements?.map(el => 
+            el.key === key ? { ...el, [prop]: value } : el
+        );
+        handleUpdateTemplate({ 
+            ...activeTemplate, 
+            elements: {
+                ...activeTemplate.elements,
+                customElements: updatedCustoms 
+            }
+        });
+    };
+
+
     const renderElementProperties = () => {
         if (!activeTemplate || !selectedElementKey) return (
             <div className="p-4 text-gray-400">Vyberte element ze seznamu pro úpravu jeho vlastností.</div>
         );
 
         const isAuthorOfActive = activeTemplate.user_id === currentUserId;
-        const element = activeTemplate.elements[selectedElementKey];
+        
+        const isCoreElement = Object.keys(activeTemplate.elements).includes(selectedElementKey);
+        const customElement = activeTemplate.elements.customElements?.find(el => el.key === selectedElementKey);
+        
+        const element = isCoreElement 
+            ? activeTemplate.elements[selectedElementKey as keyof Template['elements']]
+            : customElement?.position;
+
         const fontKey = getFontKeyFromElement(selectedElementKey);
         const font = fontKey ? activeTemplate.fonts[fontKey] : null;
+
+        if (!element) return null;
 
         const handleElementChange = (prop: keyof TemplateElement, value: string | boolean) => {
             const updatedValue = typeof value === 'string' ? (parseFloat(value) || 0) : value;
@@ -203,8 +304,25 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
 
         return (
              <fieldset disabled={!isAuthorOfActive} className="disabled:opacity-50 p-4 border-t border-gray-700">
-                <h4 className="text-lg font-bold text-yellow-300 mb-2 capitalize">{selectedElementKey.replace(/([A-Z])/g, ' $1')}</h4>
+                <div className="flex justify-between items-center">
+                    <h4 className="text-lg font-bold text-yellow-300 mb-2 capitalize">{customElement?.label || selectedElementKey.replace(/([A-Z])/g, ' $1')}</h4>
+                    {customElement && isAuthorOfActive && (
+                        <button onClick={() => handleDeleteCustomElement(customElement.key)} className="text-red-500 hover:text-red-400 text-xs">SMAZAT</button>
+                    )}
+                </div>
                 <div className="space-y-2 text-sm">
+                     {customElement && (
+                        <div className="flex items-center gap-2 p-2 bg-gray-900/50 rounded-md">
+                            <input 
+                                type="checkbox" 
+                                id="parsesSymbols" 
+                                checked={customElement.parsesSymbols ?? false} 
+                                onChange={(e) => handleCustomElementPropertyChange(customElement.key, 'parsesSymbols', e.target.checked)} 
+                                className="w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500 cursor-pointer"
+                            />
+                            <label htmlFor="parsesSymbols" className="font-bold text-gray-300 select-none cursor-pointer">Zpracovávat mana symboly</label>
+                        </div>
+                    )}
                     <div className="flex items-center gap-2 p-2 bg-gray-900/50 rounded-md">
                         <input type="checkbox" id="elementVisible" checked={element.visible ?? true} onChange={(e) => handleElementChange('visible', e.target.checked)} className="w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500 cursor-pointer"/>
                         <label htmlFor="elementVisible" className="font-bold text-gray-300 select-none cursor-pointer">Element je viditelný</label>
@@ -302,22 +420,39 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                                     <img src={activeTemplate.frameImageUrl} alt="Template Frame" className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1, filter: `saturate(${activeTemplate.saturation ?? 1}) hue-rotate(${activeTemplate.hue ?? 0}deg)`}}/>
                                     <div className="absolute inset-0 pointer-events-none" style={{ ...generateMaskedGradientStyle(activeTemplate), zIndex: 2 }}/>
                                     
-                                    {(Object.keys(activeTemplate.elements) as ElementKey[]).map(key => {
-                                        const fontKey = getFontKeyFromElement(key);
-                                        const fontStyle = fontKey ? activeTemplate.fonts[fontKey] : undefined;
+                                    {(Object.keys(activeTemplate.elements) as (keyof Omit<Template['elements'], 'customElements'>)[]).map(key => (
+                                        (activeTemplate.elements[key].visible ?? true) && (
+                                            <DraggableResizableBox 
+                                                key={key} 
+                                                id={key} 
+                                                position={activeTemplate.elements[key]} 
+                                                onUpdate={(newPos) => { if (activeTemplate.user_id === currentUserId) { handleUpdateElement(key, newPos); }}} 
+                                                isSelected={selectedElementKey === key} 
+                                                onClick={(e) => { e.stopPropagation(); setSelectedElementKey(key); }}
+                                                fontStyle={activeTemplate.fonts[getFontKeyFromElement(key)!]}
+                                            >
+                                                {key.replace(/([A-Z])/g, ' $1')}
+                                            </DraggableResizableBox>
+                                        )
+                                    ))}
 
+                                    {(activeTemplate.elements.customElements || []).map(customEl => {
+                                        const fontStyle = activeTemplate.fonts[customEl.fontKey];
                                         return (
-                                            (activeTemplate.elements[key].visible ?? true) && (
+                                            (customEl.position.visible ?? true) && (
                                                 <DraggableResizableBox 
-                                                    key={key} 
-                                                    id={key} 
-                                                    position={activeTemplate.elements[key]} 
-                                                    onUpdate={(newPos) => { if (activeTemplate.user_id === currentUserId) { handleUpdateElement(key, newPos); }}} 
-                                                    isSelected={selectedElementKey === key} 
-                                                    onClick={(e) => { e.stopPropagation(); setSelectedElementKey(key); }}
+                                                    key={customEl.key} 
+                                                    id={customEl.key} 
+                                                    position={customEl.position}
+                                                    onUpdate={(newPos) => {
+                                                        if (activeTemplate.user_id !== currentUserId) return;
+                                                        handleCustomElementPropertyChange(customEl.key, 'position', newPos)
+                                                    }} 
+                                                    isSelected={selectedElementKey === customEl.key} 
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedElementKey(customEl.key as ElementKey); }}
                                                     fontStyle={fontStyle}
                                                 >
-                                                  {key.replace(/([A-Z])/g, ' $1')}
+                                                    {customEl.label}
                                                 </DraggableResizableBox>
                                             )
                                         )
@@ -348,12 +483,25 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                                 <div className="p-4 border-t border-gray-700 flex-shrink-0">
                                     <h4 className="text-lg font-bold text-yellow-300 mb-2">Elementy</h4>
                                     <div className="grid grid-cols-2 gap-2 text-sm">
-                                        {(Object.keys(activeTemplate.elements) as ElementKey[]).map(key => (
-                                            <button key={key} onClick={() => setSelectedElementKey(key)} className={`p-2 rounded capitalize text-left transition-colors ${selectedElementKey === key ? 'bg-yellow-400/20 text-yellow-200' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                                                {key.replace(/([A-Z])/g, ' $1')}
+                                        {(Object.keys(activeTemplate.elements) as (keyof Template['elements'])[]).map(key => {
+                                            if (key === 'customElements') return null;
+                                            return (
+                                                <button key={key} onClick={() => setSelectedElementKey(key)} className={`p-2 rounded capitalize text-left transition-colors ${selectedElementKey === key ? 'bg-yellow-400/20 text-yellow-200' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                                                    {key.replace(/([A-Z])/g, ' $1')}
+                                                </button>
+                                            );
+                                        })}
+                                        {(activeTemplate.elements.customElements || []).map(el => (
+                                            <button key={el.key} onClick={() => setSelectedElementKey(el.key as ElementKey)} className={`p-2 rounded capitalize text-left transition-colors ${selectedElementKey === el.key ? 'bg-yellow-400/20 text-yellow-200' : 'bg-gray-700 hover:bg-gray-600'}`}>
+                                                {el.label}
                                             </button>
                                         ))}
                                     </div>
+                                    {activeTemplate.user_id === currentUserId && (
+                                        <button onClick={handleAddCustomElement} className="w-full mt-3 py-2 px-4 rounded-md bg-blue-700 hover:bg-blue-600 text-xs transition-colors">
+                                            + Přidat vlastní element
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="flex-grow overflow-y-auto">
                                     {renderElementProperties()}

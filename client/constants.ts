@@ -176,6 +176,7 @@ export const DEFAULT_CARD_DATA: CardData = {
   collectorNumber: "042/250",
   templateId: "modern",
   setSymbolUrl: "/svgs/sets/unf.svg",
+  customFields: {}, // <-- Přidat prázdný objekt
 };
 
 export const MANA_SYMBOLS: { [key: string]: string } = {
@@ -229,6 +230,10 @@ export const MANA_SYMBOLS: { [key: string]: string } = {
   "R/G": "/svgs/mana/R_G.svg",
   "G/W": "/svgs/mana/G_W.svg",
   "G/U": "/svgs/mana/G_U.svg",
+  "L/B": "/svgs/mana/L_B.svg",
+  "L/S": "/svgs/mana/L_S.svg",
+  "L/U": "/svgs/mana/L_U.svg",
+  "L/D": "/svgs/mana/L_D.svg"
 };
 
 export const SET_SYMBOLS: { [key: string]: { name: string; url: string } } = {

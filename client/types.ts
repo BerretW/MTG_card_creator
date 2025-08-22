@@ -30,13 +30,24 @@ export interface CardData {
     flavorText: string;
     power: string;
     toughness: string;
-    loyalty?: string;
+    
     rarity: Rarity;
     artist: string;
     collectorNumber: string;
     templateId: string;
     setSymbolUrl: string;
+    customFields: Record<string, string>; 
 }
+
+
+export interface CustomTemplateElement {
+    key: string; // Unikátní klíč (např. "loyalty", "chargeCounters")
+    label: string; // Zobrazovaný název (např. "Loyalty", "Počet žetonů")
+    position: TemplateElement;
+    fontKey: string; // Klíč pro nalezení stylu v `template.fonts`
+     parsesSymbols?: boolean; // <<--- NOVÁ VOLITELNÁ VLASTNOST
+}
+
 
 export interface TemplateElement {
     x: number; // %
@@ -71,16 +82,10 @@ export interface Template {
         ptBox: TemplateElement;
         artist: TemplateElement;
         collectorNumber: TemplateElement;
+        // Přidáme volitelné pole pro custom elementy přímo sem
+        customElements?: CustomTemplateElement[];
     };
-    fonts: {
-        title: FontProperties;
-        typeLine: FontProperties;
-        rulesText: FontProperties;
-        flavorText: FontProperties;
-        pt: FontProperties;
-        artist: FontProperties;
-        collectorNumber: FontProperties;
-    };
+fonts: Record<string, FontProperties>; 
     // --- ROZŠÍŘENÉ VLASTNOSTI ---
     saturation?: number;
     hue?: number; // Nová vlastnost pro odstín

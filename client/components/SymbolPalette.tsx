@@ -26,6 +26,10 @@ const AVAILABLE_SYMBOLS: { key: string; label: string; preview: string }[] = [
     { key: "B/R", label: "Black/Red", preview: MANA_SYMBOLS["B/R"] },
     { key: "B/G", label: "Black/Green", preview: MANA_SYMBOLS["B/G"] },
     { key: "R/G", label: "Red/Green", preview: MANA_SYMBOLS["R/G"] },
+    { key: "L/B", label: "Lands", preview: MANA_SYMBOLS["L/B"] },
+    { key: "L/S", label: "Lands", preview: MANA_SYMBOLS["L/S"] },
+    { key: "L/U", label: "Lands", preview: MANA_SYMBOLS["L/U"] },
+    { key: "L/D", label: "Lands", preview: MANA_SYMBOLS["L/D"] }
 ];
 
 interface SymbolPaletteProps {

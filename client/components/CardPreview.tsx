@@ -1,6 +1,5 @@
 import React from 'react';
 import { CardData, CardType, Template } from '../types';
-// ZMĚNA: Odstraněn import ManaSymbol, místo toho importujeme MANA_SYMBOLS
 import { RARITY_COLORS, MANA_SYMBOLS } from '../constants';
 
 interface CardPreviewProps {
@@ -10,9 +9,8 @@ interface CardPreviewProps {
 }
 
 const SYMBOL_OFFSETS: Record<string, number> = {
-  T: -0.16,   // zvedne o 0.16em
-  UT: -0.08,  // zvedne o 0.08em
-  // ostatní nech prázdné = 0
+  T: -0.16,
+  UT: -0.08,
 };
 
 const parseTextWithSymbols = (text: string) => {
@@ -23,9 +21,8 @@ const parseTextWithSymbols = (text: string) => {
     if (part.startsWith('{') && part.endsWith('}')) {
       const symbol = part.slice(1, -1);
       const offsetEm = SYMBOL_OFFSETS[symbol] ?? 0;
-      const imageUrl = MANA_SYMBOLS[symbol]; // ZMĚNA: Získání URL
+      const imageUrl = MANA_SYMBOLS[symbol];
 
-      // ZMĚNA: Vykreslení <img> místo komponenty ManaSymbol
       if (imageUrl) {
         return (
           <img
@@ -43,7 +40,6 @@ const parseTextWithSymbols = (text: string) => {
           />
         );
       }
-      // Fallback pro symbol, který nemáme v mapě
       return <React.Fragment key={`text-fallback-${index}`}>{part}</React.Fragment>;
     }
     return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
@@ -81,10 +77,12 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
     const {
         name, manaCost, art, cardType, subtype,
         rulesText, flavorText, power, toughness,
-        rarity, artist, collectorNumber, setSymbolUrl
+        rarity, artist, collectorNumber, setSymbolUrl,
+        customFields
     } = cardData;
     
     const { elements, fonts, frameImageUrl, saturation, hue } = template;
+    const { customElements } = elements;
     const isCreature = cardType === CardType.Creature;
     const rarityColor = RARITY_COLORS[rarity];
     const parsedCost = manaCost.replace(/\{/g, ' ').replace(/\}/g, ' ').trim().split(/\s+/);
@@ -100,17 +98,22 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
         zIndex,
     });
 
-    const getFontStyle = (font: keyof Template['fonts']): React.CSSProperties => ({
-        fontFamily: fonts[font].fontFamily,
-        fontSize: `${fonts[font].fontSize * scale}px`,
-        color: fonts[font].color,
-        textAlign: fonts[font].textAlign,
-        fontStyle: fonts[font].fontStyle || 'normal',
-        fontWeight: fonts[font].fontWeight || 'normal',
-        width: '100%',
-        whiteSpace: 'pre-wrap',
-        lineHeight: 1.2,
-    });
+    const getFontStyle = (fontKey: string): React.CSSProperties => {
+        const font = fonts[fontKey];
+        if (!font) return {};
+
+        return {
+            fontFamily: font.fontFamily,
+            fontSize: `${font.fontSize * scale}px`,
+            color: font.color,
+            textAlign: font.textAlign,
+            fontStyle: font.fontStyle || 'normal',
+            fontWeight: font.fontWeight || 'normal',
+            width: '100%',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.2,
+        };
+    };
 
     return (
         <div 
@@ -153,7 +156,6 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
             
             {(elements.manaCost.visible ?? true) && (
                 <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: `${2 * scale}px`}}>
-                    {/* ZMĚNA: Vykreslení <img> místo komponenty ManaSymbol */}
                     {parsedCost.map((symbol, index) => {
                         const imageUrl = MANA_SYMBOLS[symbol];
                         if (!imageUrl) return null;
@@ -217,6 +219,38 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
                      <span style={getFontStyle('artist')}>Illus. {artist}</span>
                 </div>
             )}
+
+            {(customElements || []).map(customEl => {
+                const value = customFields?.[customEl.key];
+                
+                if (!value || !(customEl.position.visible ?? true)) {
+                    return null;
+                }
+
+                const content = customEl.parsesSymbols ? parseTextWithSymbols(value) : value;
+                const fontStyle = getFontStyle(customEl.fontKey);
+                
+                const elementStyle: React.CSSProperties = {
+                    position: 'absolute',
+                    left: `${customEl.position.x}%`,
+                    top: `${customEl.position.y}%`,
+                    width: `${customEl.position.width}%`,
+                    height: `${customEl.position.height}%`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: fontStyle.textAlign || 'center',
+                    zIndex: 3,
+                    padding: `0 ${4 * scale}px`, // Přidáme malý padding, aby text nebyl nalepený na okraj
+                };
+
+                return (
+                    <div key={customEl.key} style={elementStyle}>
+                        <div style={{...fontStyle, width: 'auto', display: 'flex', alignItems: 'center', gap: '0.1em' }}>
+                            {content}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 };
