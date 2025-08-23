@@ -6,6 +6,7 @@ export enum CardType {
     Enchantment = "Enchantment",
     Land = "Land",
     Planeswalker = "Planeswalker",
+    Battle = "Battle",
 }
 
 export enum Rarity {
@@ -50,19 +51,20 @@ export interface CustomTemplateElement {
 
 
 export interface TemplateElement {
-    x: number; // %
-    y: number; // %
-    width: number; // %
-    height: number; // %
-    visible?: boolean; // << ZMĚNA ZDE: Přidána volitelná vlastnost pro viditelnost
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    visible?: boolean;
+    rotation?: number; // <-- NOVÁ VOLITELNÁ VLASTNOST (ve stupních)
 }
 
 export interface FontProperties {
     fontFamily: string;
-    fontSize: number; // px, relative to a 375px card width
+    fontSize: number;
     color: string;
     textAlign: 'left' | 'center' | 'right';
-    fontStyle?: 'normal' | 'italic';
+    fontStyle?: 'normal' | 'italic'; // <-- Tato vlastnost již existuje, budeme ji využívat
     fontWeight?: 'normal' | 'bold';
 }
 

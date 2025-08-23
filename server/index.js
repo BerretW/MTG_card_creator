@@ -64,21 +64,25 @@ const authenticateToken = (req, res, next) => {
 // --- Pomocná funkce pro parsování šablony z databáze ---
 const parseTemplateFromDB = (row) => {
     if (!row) return null;
+
+    const elementsFromDB = JSON.parse(row.elements || '{}');
+    const customElements = elementsFromDB.customElements || [];
+    delete elementsFromDB.customElements;
+
     return {
         id: row.id,
         user_id: row.user_id,
         authorUsername: row.authorUsername,
         name: row.name,
         frameImageUrl: row.frame_image_url,
-        elements: JSON.parse(row.elements || '{}'),
+        elements: { ...elementsFromDB, customElements },
         fonts: JSON.parse(row.fonts || '{}'),
         saturation: row.saturation,
         hue: row.hue,
         gradientAngle: row.gradient_angle,
         gradientOpacity: row.gradient_opacity,
         gradientStartColor: row.gradient_start_color,
-        gradientEndColor: row.gradient_end_color,
-        customElements: JSON.parse(row.custom_elements || '[]')
+        gradientEndColor: row.gradient_end_color
     };
 };
 
@@ -214,17 +218,19 @@ app.post('/api/templates', authenticateToken, (req, res) => {
     const sql = `INSERT INTO templates (
         user_id, name, frame_image_url, elements, fonts,
         saturation, hue, gradient_angle, gradient_opacity,
-        gradient_start_color, gradient_end_color, custom_elements
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        gradient_start_color, gradient_end_color
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const params = [
         req.user.id, name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
-        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor,
-        JSON.stringify(elements.customElements || [])
+        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor
     ];
 
     db.run(sql, params, function (err) {
-        if (err) return res.status(500).json({ message: "Chyba při vytváření šablony." });
+        if (err) {
+            console.error("Database error creating template:", err);
+            return res.status(500).json({ message: "Chyba při vytváření šablony." });
+        }
         db.get("SELECT t.*, u.username as authorUsername FROM templates t LEFT JOIN users u ON t.user_id = u.id WHERE t.id = ?", [this.lastID], (err, row) => {
              if (err || !row) return res.status(500).json({ message: "Chyba při načítání nově vytvořené šablony." });
             res.status(201).json(parseTemplateFromDB(row));
@@ -243,19 +249,23 @@ app.put('/api/templates/:id', authenticateToken, (req, res) => {
     const sql = `UPDATE templates SET 
         name = ?, frame_image_url = ?, elements = ?, fonts = ?,
         saturation = ?, hue = ?, gradient_angle = ?, gradient_opacity = ?,
-        gradient_start_color = ?, gradient_end_color = ?, custom_elements = ?
+        gradient_start_color = ?, gradient_end_color = ?
         WHERE id = ? AND user_id = ?`;
         
     const params = [
         name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
         saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor,
-        JSON.stringify(elements.customElements || []),
         id, req.user.id
     ];
 
     db.run(sql, params, function (err) {
-        if (err) return res.status(500).json({ message: "Chyba při aktualizaci šablony." });
-        if (this.changes === 0) return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
+        if (err) {
+            console.error("Database error updating template:", err);
+            return res.status(500).json({ message: "Chyba při aktualizaci šablony." });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
+        }
          db.get("SELECT t.*, u.username as authorUsername FROM templates t LEFT JOIN users u ON t.user_id = u.id WHERE t.id = ?", [id], (err, row) => {
              if (err || !row) return res.status(500).json({ message: "Chyba při načítání aktualizované šablony." });
             res.status(200).json(parseTemplateFromDB(row));
@@ -272,7 +282,6 @@ app.delete('/api/templates/:id', authenticateToken, (req, res) => {
         res.status(200).json({ message: "Šablona úspěšně smazána." });
     });
 });
-
 
 // =====================================================================
 // === SEKCE PRO BALÍČKY (DECKS) - Správně seřazeno ===

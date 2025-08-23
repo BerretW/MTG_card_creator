@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback, MouseEvent } from 'react';
-// Přidáme import typů FontProperties a TemplateElement
 import { TemplateElement, FontProperties } from '../types';
 
 interface DraggableResizableBoxProps {
@@ -9,7 +8,7 @@ interface DraggableResizableBoxProps {
     isSelected: boolean;
     onClick: (event: MouseEvent<HTMLDivElement>) => void;
     children: React.ReactNode;
-    fontStyle?: FontProperties; // <-- NOVÁ VOLITELNÁ PROP
+    fontStyle?: FontProperties;
 }
 
 type DragAction = 'move' | 'resize-br' | null;
@@ -20,8 +19,7 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
     const [startMouse, setStartMouse] = useState({ x: 0, y: 0 });
     const [startPosition, setStartPosition] = useState(position);
 
-    // ... (všechny handlery handleMouseDown, handleMouseMove, handleMouseUp zůstávají stejné)
-
+    // ... (všechny handlery zůstávají stejné)
     const handleMouseDown = (e: MouseEvent<HTMLDivElement>, currentAction: DragAction) => {
         e.preventDefault();
         e.stopPropagation(); 
@@ -34,15 +32,11 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
 
     const handleMouseMove = useCallback((e: globalThis.MouseEvent) => {
         if (!action || !boxRef.current) return;
-
         const parentRect = boxRef.current.parentElement?.getBoundingClientRect();
         if (!parentRect) return;
-
         const dx = (e.clientX - startMouse.x) / parentRect.width * 100;
         const dy = (e.clientY - startMouse.y) / parentRect.height * 100;
-
         let newPos = { ...startPosition };
-
         if (action === 'move') {
             newPos.x = startPosition.x + dx;
             newPos.y = startPosition.y + dy;
@@ -50,14 +44,13 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
             newPos.width = startPosition.width + dx;
             newPos.height = startPosition.height + dy;
         }
-        
-        newPos.x = Math.max(0, Math.min(100 - newPos.width, newPos.x));
-        newPos.y = Math.max(0, Math.min(100 - newPos.height, newPos.y));
-        newPos.width = Math.max(5, Math.min(100 - newPos.x, newPos.width));
-        newPos.height = Math.max(2, Math.min(100 - newPos.y, newPos.height));
-
+        newPos.width = Math.max(5, newPos.width);
+        newPos.height = Math.max(2, newPos.height);
+        const MIN_BOUNDARY = -50;
+        const MAX_BOUNDARY = 150;
+        newPos.x = Math.max(MIN_BOUNDARY, Math.min(MAX_BOUNDARY, newPos.x));
+        newPos.y = Math.max(MIN_BOUNDARY, Math.min(MAX_BOUNDARY, newPos.y));
         onUpdate(newPos);
-
     }, [action, startMouse, startPosition, onUpdate]);
 
     const handleMouseUp = useCallback(() => {
@@ -86,6 +79,7 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
         cursor: action === 'move' ? 'grabbing' : 'grab',
         transition: action ? 'none' : 'border-color 0.2s',
         zIndex: 3,
+        transform: `rotate(${position.rotation ?? 0}deg)`,
     };
 
     const handleStyle: React.CSSProperties = {
@@ -97,22 +91,19 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
         borderRadius: '50%',
     };
 
-    // --- NOVÁ LOGIKA PRO STYLOVÁNÍ TEXTU ---
     const textStyle: React.CSSProperties = fontStyle ? {
         fontFamily: fontStyle.fontFamily,
         fontSize: `${fontStyle.fontSize}px`,
         color: fontStyle.color,
         fontWeight: fontStyle.fontWeight ?? 'normal',
         fontStyle: fontStyle.fontStyle ?? 'normal',
-        // Pro přehlednost v editoru text vždy centrujeme
         textAlign: 'center', 
-        width: '100%',
+        width: 'auto', // <-- ZMĚNA ZDE: Necháme text, aby si určil vlastní šířku
         padding: '0 4px',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
     } : {
-        // Výchozí styl, pokud element nemá definovaný font (např. 'art')
         fontSize: '10px',
         color: 'rgba(255, 255, 255, 0.5)',
         textTransform: 'capitalize',
@@ -121,7 +112,6 @@ const DraggableResizableBox: React.FC<DraggableResizableBoxProps> = ({ position,
     return (
         <div ref={boxRef} style={boxStyle} onMouseDown={(e) => handleMouseDown(e, 'move')}>
             <div className="w-full h-full flex items-center justify-center bg-black/30">
-                {/* Aplikujeme nový styl na span */}
                 <span style={textStyle}>{children}</span>
             </div>
             {isSelected && (

@@ -143,11 +143,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         const label = prompt("Zadejte zobrazovaný název (např. 'Loyalty'):", key);
         if (!label) return;
 
+        const parsesSymbols = window.confirm("Má toto pole zpracovávat mana symboly (např. {U}, {T})?");
+
         const newElement: CustomTemplateElement = {
             key,
             label,
             position: { x: 40, y: 85, width: 20, height: 8, visible: true },
             fontKey: key,
+            parsesSymbols: parsesSymbols,
         };
 
         const newFonts = {
@@ -187,18 +190,31 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
             setSelectedElementKey(null);
         }
     };
-
+    
+    const handleCustomElementPropertyChange = (key: string, prop: keyof CustomTemplateElement, value: any) => {
+        if (!activeTemplate) return;
+        const updatedCustoms = activeTemplate.elements.customElements?.map(el => 
+            el.key === key ? { ...el, [prop]: value } : el
+        );
+        handleUpdateTemplate({ 
+            ...activeTemplate, 
+            elements: {
+                ...activeTemplate.elements,
+                customElements: updatedCustoms 
+            }
+        });
+    };
 
     const handleSaveAndClose = () => onSave(templates);
     
     const getFontKeyFromElement = (elementKey: ElementKey): FontKey | null => {
         if (!activeTemplate) return null;
         if (Object.keys(activeTemplate.elements).includes(elementKey)) {
-             const keyMap: Partial<Record<keyof Template['elements'], FontKey>> = {
+             const keyMap: Partial<Record<keyof Omit<Template['elements'], 'customElements'>, FontKey>> = {
                 title: 'title', typeLine: 'typeLine', textBox: 'rulesText',
                 ptBox: 'pt', artist: 'artist', collectorNumber: 'collectorNumber',
             };
-            return keyMap[elementKey as keyof Template['elements']] || null;
+            return keyMap[elementKey as keyof Omit<Template['elements'], 'customElements'>] || null;
         }
         const customEl = activeTemplate.elements.customElements?.find(el => el.key === elementKey);
         return customEl?.fontKey || null;
@@ -256,42 +272,23 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
         );
     };
 
-
-        const handleCustomElementPropertyChange = (key: string, prop: keyof CustomTemplateElement, value: any) => {
-        if (!activeTemplate) return;
-        const updatedCustoms = activeTemplate.elements.customElements?.map(el => 
-            el.key === key ? { ...el, [prop]: value } : el
-        );
-        handleUpdateTemplate({ 
-            ...activeTemplate, 
-            elements: {
-                ...activeTemplate.elements,
-                customElements: updatedCustoms 
-            }
-        });
-    };
-
-
     const renderElementProperties = () => {
         if (!activeTemplate || !selectedElementKey) return (
             <div className="p-4 text-gray-400">Vyberte element ze seznamu pro úpravu jeho vlastností.</div>
         );
 
         const isAuthorOfActive = activeTemplate.user_id === currentUserId;
-        
         const isCoreElement = Object.keys(activeTemplate.elements).includes(selectedElementKey);
         const customElement = activeTemplate.elements.customElements?.find(el => el.key === selectedElementKey);
-        
         const element = isCoreElement 
-            ? activeTemplate.elements[selectedElementKey as keyof Template['elements']]
+            ? activeTemplate.elements[selectedElementKey as keyof Omit<Template['elements'], 'customElements'>]
             : customElement?.position;
-
         const fontKey = getFontKeyFromElement(selectedElementKey);
         const font = fontKey ? activeTemplate.fonts[fontKey] : null;
 
         if (!element) return null;
 
-        const handleElementChange = (prop: keyof TemplateElement, value: string | boolean) => {
+        const handleElementChange = (prop: keyof TemplateElement, value: string | boolean | number) => {
             const updatedValue = typeof value === 'string' ? (parseFloat(value) || 0) : value;
             handleUpdateElement(selectedElementKey, { ...element, [prop]: updatedValue });
         };
@@ -311,7 +308,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                     )}
                 </div>
                 <div className="space-y-2 text-sm">
-                     {customElement && (
+                    {customElement && (
                         <div className="flex items-center gap-2 p-2 bg-gray-900/50 rounded-md">
                             <input 
                                 type="checkbox" 
@@ -323,10 +320,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                             <label htmlFor="parsesSymbols" className="font-bold text-gray-300 select-none cursor-pointer">Zpracovávat mana symboly</label>
                         </div>
                     )}
+
                     <div className="flex items-center gap-2 p-2 bg-gray-900/50 rounded-md">
                         <input type="checkbox" id="elementVisible" checked={element.visible ?? true} onChange={(e) => handleElementChange('visible', e.target.checked)} className="w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500 cursor-pointer"/>
                         <label htmlFor="elementVisible" className="font-bold text-gray-300 select-none cursor-pointer">Element je viditelný</label>
                     </div>
+                    
                     <p className="font-bold text-gray-400 mt-2">Position & Size (%)</p>
                     <div className="grid grid-cols-2 gap-2">
                         <label>X: <input type="number" step="0.1" value={element.x.toFixed(1)} onChange={e => handleElementChange('x', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
@@ -334,6 +333,21 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                         <label>W: <input type="number" step="0.1" value={element.width.toFixed(1)} onChange={e => handleElementChange('width', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
                         <label>H: <input type="number" step="0.1" value={element.height.toFixed(1)} onChange={e => handleElementChange('height', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
                     </div>
+
+                    <div className="pt-2">
+                        <label className="font-bold text-gray-400">Natočení ({element.rotation ?? 0}
+                            °)</label>
+                        <input 
+                            type="range" 
+                            min="-90" 
+                            max="90" 
+                            step="1" 
+                            value={element.rotation ?? 0} 
+                            onChange={e => handleElementChange('rotation', parseInt(e.target.value))}
+                            className="w-full"
+                        />
+                    </div>
+
                     {font && fontKey && (
                         <>
                             <p className="font-bold text-gray-400 mt-4">Font</p>
@@ -342,9 +356,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ templates: initialTempl
                               <label>Size (px): <input type="number" value={font.fontSize ?? 16} onChange={e => handleFontChange('fontSize', e.target.value)} className="w-full bg-gray-700 p-1 rounded border border-gray-600" /></label>
                               <label>Color: <input type="color" value={font.color ?? '#000000'} onChange={e => handleFontChange('color', e.target.value)} className="w-full bg-gray-700 p-0 h-8 border-gray-600 cursor-pointer" /></label>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                                <label>Align: <select value={font.textAlign ?? 'left'} onChange={e => handleFontChange('textAlign', e.target.value as 'left' | 'center' | 'right')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
                                <label>Weight: <select value={font.fontWeight ?? 'normal'} onChange={e => handleFontChange('fontWeight', e.target.value as 'normal' | 'bold')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="normal">Normal</option><option value="bold">Bold</option></select></label>
+                               <label>Style: <select value={font.fontStyle ?? 'normal'} onChange={e => handleFontChange('fontStyle', e.target.value as 'normal' | 'italic')} className="w-full bg-gray-700 p-1 rounded border border-gray-600"><option value="normal">Normal</option><option value="italic">Italic</option></select></label>
                             </div>
                         </>
                     )}

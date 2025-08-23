@@ -1,5 +1,5 @@
 import React from 'react';
-import { CardData, CardType, Template } from '../types';
+import { CardData, CardType, Template, TemplateElement } from '../types';
 import { RARITY_COLORS, MANA_SYMBOLS } from '../constants';
 
 interface CardPreviewProps {
@@ -68,7 +68,6 @@ const generateMaskedGradientStyle = (template: Template): React.CSSProperties =>
     };
 };
 
-
 const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1 }) => {
     if (!template) {
         return <div className="w-[375px] h-[525px] bg-red-500 text-white flex items-center justify-center">Šablona nebyla nalezena!</div>;
@@ -87,21 +86,19 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
     const rarityColor = RARITY_COLORS[rarity];
     const parsedCost = manaCost.replace(/\{/g, ' ').replace(/\}/g, ' ').trim().split(/\s+/);
 
-    const getElementStyle = (el: keyof Template['elements'], zIndex: number = 3): React.CSSProperties => ({
+    const getElementContainerStyle = (element: TemplateElement): React.CSSProperties => ({
         position: 'absolute',
-        left: `${elements[el].x}%`,
-        top: `${elements[el].y}%`,
-        width: `${elements[el].width}%`,
-        height: `${elements[el].height}%`,
+        left: `${element.x}%`,
+        top: `${element.y}%`,
+        width: `${element.width}%`,
+        height: `${element.height}%`,
+        transform: `rotate(${element.rotation ?? 0}deg)`,
         display: 'flex',
-        alignItems: 'center',
-        zIndex,
     });
 
     const getFontStyle = (fontKey: string): React.CSSProperties => {
         const font = fonts[fontKey];
         if (!font) return {};
-
         return {
             fontFamily: font.fontFamily,
             fontSize: `${font.fontSize * scale}px`,
@@ -109,9 +106,9 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
             textAlign: font.textAlign,
             fontStyle: font.fontStyle || 'normal',
             fontWeight: font.fontWeight || 'normal',
-            width: '100%',
-            whiteSpace: 'pre-wrap',
             lineHeight: 1.2,
+            whiteSpace: 'pre-wrap',
+            // --- ZMĚNA ZDE: Odstraněna šířka, je řízena kontejnerem ---
         };
     };
 
@@ -125,7 +122,7 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
             }}
         >
             {(elements.art.visible ?? true) && (
-                <div style={{...getElementStyle('art', 0), overflow: 'hidden'}}>
+                <div style={{...getElementContainerStyle(elements.art), zIndex: 0, overflow: 'hidden'}}>
                     <img src={art.cropped} alt="Card Art" className="w-full h-full object-cover" />
                 </div>
             )}
@@ -134,59 +131,42 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
                 src={frameImageUrl} 
                 alt="Card Frame" 
                 className="absolute top-0 left-0 w-full h-full pointer-events-none" 
-                style={{ 
-                    zIndex: 1,
-                    filter: `saturate(${saturation ?? 1}) hue-rotate(${hue ?? 0}deg)`
-                }}
+                style={{ zIndex: 1, filter: `saturate(${saturation ?? 1}) hue-rotate(${hue ?? 0}deg)` }}
             />
             
             <div 
                 className="absolute inset-0 pointer-events-none"
-                style={{
-                    ...generateMaskedGradientStyle(template),
-                    zIndex: 2
-                }}
+                style={{ ...generateMaskedGradientStyle(template), zIndex: 2 }}
             />
 
             {(elements.title.visible ?? true) && (
-                <div style={getElementStyle('title')}>
-                    <p style={getFontStyle('title')}>{name}</p>
+                <div style={{...getElementContainerStyle(elements.title), zIndex: 3, alignItems: 'center'}}>
+                    <div style={{...getFontStyle('title'), width: '100%'}}>{name}</div>
                 </div>
             )}
             
             {(elements.manaCost.visible ?? true) && (
-                <div style={{...getElementStyle('manaCost'), justifyContent: 'flex-end', gap: `${2 * scale}px`}}>
-                    {parsedCost.map((symbol, index) => {
-                        const imageUrl = MANA_SYMBOLS[symbol];
-                        if (!imageUrl) return null;
-                        
-                        return (
-                            <img 
-                                key={index} 
-                                src={imageUrl}
-                                alt={symbol}
-                                className="inline-block"
-                                style={{ height: `${24 * scale}px`, width: `${24 * scale}px` }} 
-                            />
-                        );
-                    })}
+                <div style={{...getElementContainerStyle(elements.manaCost), justifyContent: 'flex-end', gap: `${2 * scale}px`, zIndex: 3, alignItems: 'center'}}>
+                    {parsedCost.map((symbol, index) => (
+                        <img key={index} src={MANA_SYMBOLS[symbol]} alt={symbol} className="inline-block" style={{ height: `${24 * scale}px`, width: `${24 * scale}px` }} />
+                    ))}
                 </div>
             )}
 
             {(elements.typeLine.visible ?? true) && (
-                <div style={getElementStyle('typeLine')}>
-                    <p style={getFontStyle('typeLine')}>{cardType}{subtype && ` — ${subtype}`}</p>
+                <div style={{...getElementContainerStyle(elements.typeLine), zIndex: 3, alignItems: 'center'}}>
+                    <div style={{...getFontStyle('typeLine'), width: '100%'}}>{cardType}{subtype && ` — ${subtype}`}</div>
                 </div>
             )}
 
             {(elements.setSymbol.visible ?? true) && (
-                <div style={{ ...getElementStyle('setSymbol'), justifyContent: 'center' }}>
+                <div style={{ ...getElementContainerStyle(elements.setSymbol), justifyContent: 'center', zIndex: 3, alignItems: 'center' }}>
                     <img src={setSymbolUrl} alt="Set Symbol" className="h-full w-auto" style={{ filter: `drop-shadow(0 0 2px ${rarityColor})` }}/>
                 </div>
             )}
 
             {(elements.textBox.visible ?? true) && (
-                <div style={{ ...getElementStyle('textBox'), display: 'block', overflowY: 'auto', padding: `${5 * scale}px` }}>
+                <div style={{ ...getElementContainerStyle(elements.textBox), display: 'block', overflowY: 'auto', padding: `${5 * scale}px`, zIndex: 3 }}>
                     <div style={getFontStyle('rulesText')}>
                         {rulesText.split('\n').map((line, i) => (
                             <div key={i}>{parseTextWithSymbols(line)}</div>
@@ -203,48 +183,40 @@ const CardPreview: React.FC<CardPreviewProps> = ({ cardData, template, scale = 1
             )}
 
             {isCreature && (elements.ptBox.visible ?? true) && (
-                <div style={{...getElementStyle('ptBox'), justifyContent: 'center' }}>
-                    <span style={getFontStyle('pt')}>{power} / {toughness}</span>
+                <div style={{...getElementContainerStyle(elements.ptBox), justifyContent: 'center', zIndex: 3, alignItems: 'center' }}>
+                    <div style={{...getFontStyle('pt'), width: '100%'}}>{power} / {toughness}</div>
                 </div>
             )}
 
             {(elements.collectorNumber.visible ?? true) && (
-                <div style={getElementStyle('collectorNumber')}>
-                     <span style={getFontStyle('collectorNumber')}>{collectorNumber}</span>
+                <div style={{...getElementContainerStyle(elements.collectorNumber), zIndex: 3, alignItems: 'center'}}>
+                     <div style={{...getFontStyle('collectorNumber'), width: '100%'}}>{collectorNumber}</div>
                 </div>
             )}
 
             {(elements.artist.visible ?? true) && (
-                <div style={getElementStyle('artist')}>
-                     <span style={getFontStyle('artist')}>Illus. {artist}</span>
+                <div style={{...getElementContainerStyle(elements.artist), zIndex: 3, alignItems: 'center'}}>
+                     <div style={{...getFontStyle('artist'), width: '100%'}}>Illus. {artist}</div>
                 </div>
             )}
 
             {(customElements || []).map(customEl => {
                 const value = customFields?.[customEl.key];
-                
-                if (!value || !(customEl.position.visible ?? true)) {
-                    return null;
-                }
+                if (!value || !(customEl.position.visible ?? true)) return null;
 
                 const content = customEl.parsesSymbols ? parseTextWithSymbols(value) : value;
                 const fontStyle = getFontStyle(customEl.fontKey);
                 
-                const elementStyle: React.CSSProperties = {
-                    position: 'absolute',
-                    left: `${customEl.position.x}%`,
-                    top: `${customEl.position.y}%`,
-                    width: `${customEl.position.width}%`,
-                    height: `${customEl.position.height}%`,
-                    display: 'flex',
+                const elementContainerStyle: React.CSSProperties = {
+                    ...getElementContainerStyle(customEl.position), 
+                    zIndex: 3,
+                    padding: `0 ${4 * scale}px`,
                     alignItems: 'center',
                     justifyContent: fontStyle.textAlign || 'center',
-                    zIndex: 3,
-                    padding: `0 ${4 * scale}px`, // Přidáme malý padding, aby text nebyl nalepený na okraj
                 };
 
                 return (
-                    <div key={customEl.key} style={elementStyle}>
+                    <div key={customEl.key} style={elementContainerStyle}>
                         <div style={{...fontStyle, width: 'auto', display: 'flex', alignItems: 'center', gap: '0.1em' }}>
                             {content}
                         </div>
