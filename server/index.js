@@ -7,7 +7,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./database.js');
-const axios = require('axios'); // << DŮLEŽITÉ: Přidáno pro proxy
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -66,7 +66,6 @@ const parseTemplateFromDB = (row) => {
     if (!row) return null;
     return {
         id: row.id,
-        // DŮLEŽITÉ: Přidáváme user_id (ID autora) a jeho jméno do objektu šablony
         user_id: row.user_id,
         authorUsername: row.authorUsername,
         name: row.name,
@@ -78,13 +77,14 @@ const parseTemplateFromDB = (row) => {
         gradientAngle: row.gradient_angle,
         gradientOpacity: row.gradient_opacity,
         gradientStartColor: row.gradient_start_color,
-        gradientEndColor: row.gradient_end_color
+        gradientEndColor: row.gradient_end_color,
+        customElements: JSON.parse(row.custom_elements || '[]')
     };
 };
 
 // --- API Routes ---
 
-// *** NOVÁ PROXY ROUTE PRO OBRÁZKY ***
+// *** PROXY ROUTE PRO OBRÁZKY ***
 app.get('/api/image-proxy', async (req, res) => {
     try {
         const imageUrl = req.query.url;
@@ -107,7 +107,7 @@ app.get('/api/image-proxy', async (req, res) => {
 });
 
 
-// AUTH
+// *** AUTH ***
 app.post('/api/auth/register', (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: "Uživatelské jméno a heslo jsou povinné." });
@@ -143,7 +143,7 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
-// ASSETS
+// *** ASSETS ***
 app.get('/api/assets', authenticateToken, (req, res) => {
     db.all('SELECT * FROM assets WHERE user_id = ? ORDER BY id DESC', [req.user.id], (err, rows) => {
         if (err) return res.status(500).json({ message: "Chyba při načítání obrázků." });
@@ -165,22 +165,35 @@ app.post('/api/assets', authenticateToken, upload.single('art'), (req, res) => {
     });
 });
 
+app.delete('/api/assets/:id', authenticateToken, (req, res) => {
+    const assetId = req.params.id;
+    db.get('SELECT filename FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ message: "Chyba při mazání obrázku." });
+        if (!row) return res.status(404).json({ message: "Obrázek nenalezen nebo nemáte oprávnění." });
 
-// TEMPLATES (CRUD)
+        const filename = row.filename;
+        const filePath = path.join(__dirname, 'uploads', filename);
+
+        db.run('DELETE FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], function (err) {
+            if (err) return res.status(500).json({ message: "Chyba při mazání obrázku z databáze." });
+            fs.unlink(filePath, (unlinkErr) => {
+                if (unlinkErr) console.error("Error při mazání souboru:", unlinkErr);
+                res.status(200).json({ message: "Obrázek úspěšně smazán." });
+            });
+        });
+    });
+});
+
+// *** TEMPLATES (CRUD) ***
 app.get('/api/templates', authenticateToken, (req, res) => {
-    // Použijeme LEFT JOIN, abychom získali i šablony od smazaných uživatelů
     const sql = `
         SELECT t.*, u.username as authorUsername 
         FROM templates t
         LEFT JOIN users u ON t.user_id = u.id
         ORDER BY t.name ASC
     `;
-    
     db.all(sql, [], (err, rows) => {
-        if (err) {
-            console.error("Database error fetching templates:", err);
-            return res.status(500).json({ message: "Chyba při načítání šablon." });
-        }
+        if (err) return res.status(500).json({ message: "Chyba při načítání šablon." });
         try {
             const templates = rows.map(parseTemplateFromDB);
             res.json(templates);
@@ -201,23 +214,19 @@ app.post('/api/templates', authenticateToken, (req, res) => {
     const sql = `INSERT INTO templates (
         user_id, name, frame_image_url, elements, fonts,
         saturation, hue, gradient_angle, gradient_opacity,
-        gradient_start_color, gradient_end_color
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        gradient_start_color, gradient_end_color, custom_elements
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const params = [
         req.user.id, name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
-        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor
+        saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor,
+        JSON.stringify(elements.customElements || [])
     ];
 
     db.run(sql, params, function (err) {
-        if (err) {
-            console.error("Database error creating template:", err);
-            return res.status(500).json({ message: "Chyba při vytváření šablony." });
-        }
-        db.get("SELECT * FROM templates WHERE id = ?", [this.lastID], (err, row) => {
-             if (err || !row) {
-                return res.status(500).json({ message: "Chyba při načítání nově vytvořené šablony." });
-            }
+        if (err) return res.status(500).json({ message: "Chyba při vytváření šablony." });
+        db.get("SELECT t.*, u.username as authorUsername FROM templates t LEFT JOIN users u ON t.user_id = u.id WHERE t.id = ?", [this.lastID], (err, row) => {
+             if (err || !row) return res.status(500).json({ message: "Chyba při načítání nově vytvořené šablony." });
             res.status(201).json(parseTemplateFromDB(row));
         });
     });
@@ -234,27 +243,21 @@ app.put('/api/templates/:id', authenticateToken, (req, res) => {
     const sql = `UPDATE templates SET 
         name = ?, frame_image_url = ?, elements = ?, fonts = ?,
         saturation = ?, hue = ?, gradient_angle = ?, gradient_opacity = ?,
-        gradient_start_color = ?, gradient_end_color = ?
+        gradient_start_color = ?, gradient_end_color = ?, custom_elements = ?
         WHERE id = ? AND user_id = ?`;
         
     const params = [
         name, frameImageUrl, JSON.stringify(elements), JSON.stringify(fonts),
         saturation, hue, gradientAngle, gradientOpacity, gradientStartColor, gradientEndColor,
+        JSON.stringify(elements.customElements || []),
         id, req.user.id
     ];
 
     db.run(sql, params, function (err) {
-        if (err) {
-            console.error("Database error updating template:", err);
-            return res.status(500).json({ message: "Chyba při aktualizaci šablony." });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
-        }
-         db.get("SELECT * FROM templates WHERE id = ?", [id], (err, row) => {
-             if (err || !row) {
-                return res.status(500).json({ message: "Chyba při načítání aktualizované šablony." });
-            }
+        if (err) return res.status(500).json({ message: "Chyba při aktualizaci šablony." });
+        if (this.changes === 0) return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
+         db.get("SELECT t.*, u.username as authorUsername FROM templates t LEFT JOIN users u ON t.user_id = u.id WHERE t.id = ?", [id], (err, row) => {
+             if (err || !row) return res.status(500).json({ message: "Chyba při načítání aktualizované šablony." });
             res.status(200).json(parseTemplateFromDB(row));
         });
     });
@@ -263,21 +266,60 @@ app.put('/api/templates/:id', authenticateToken, (req, res) => {
 app.delete('/api/templates/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const sql = `DELETE FROM templates WHERE id = ? AND user_id = ?`;
-
     db.run(sql, [id, req.user.id], function (err) {
-        if (err) {
-            console.error("Database error deleting template:", err);
-            return res.status(500).json({ message: "Chyba při mazání šablony." });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
-        }
+        if (err) return res.status(500).json({ message: "Chyba při mazání šablony." });
+        if (this.changes === 0) return res.status(404).json({ message: "Šablona nenalezena nebo nemáte oprávnění." });
         res.status(200).json({ message: "Šablona úspěšně smazána." });
     });
 });
 
 
-// DECKS
+// =====================================================================
+// === SEKCE PRO BALÍČKY (DECKS) - Správně seřazeno ===
+// =====================================================================
+
+// --- Veřejné balíčky (specifické cesty musí být první) ---
+
+app.get('/api/decks/public', authenticateToken, (req, res) => {
+    const sql = `
+        SELECT d.id, d.name, d.description, d.created_at, u.username as authorUsername
+        FROM decks d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.is_public = 1
+        ORDER BY d.created_at DESC
+    `;
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Chyba při načítání veřejných balíčků." });
+        res.json(rows);
+    });
+});
+
+app.get('/api/decks/public/:id', authenticateToken, (req, res) => {
+    const deckSql = `
+        SELECT d.id, d.name, d.description, d.created_at, u.username as authorUsername
+        FROM decks d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.id = ? AND d.is_public = 1
+    `;
+    db.get(deckSql, [req.params.id], (err, deck) => {
+        if (err) return res.status(500).json({ message: "Chyba databáze." });
+        if (!deck) return res.status(404).json({ message: "Veřejný balíček nenalezen." });
+
+        const cardsSql = "SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY added_at ASC";
+        db.all(cardsSql, [req.params.id], (err, cards) => {
+            if (err) return res.status(500).json({ message: "Chyba při načítání karet." });
+            const processedCards = cards.map(c => ({
+                ...c,
+                card_data: JSON.parse(c.card_data),
+                template_data: JSON.parse(c.template_data)
+            }));
+            res.json({ ...deck, cards: processedCards });
+        });
+    });
+});
+
+// --- Správa vlastních balíčků ---
+
 app.get('/api/decks', authenticateToken, (req, res) => {
     const sql = "SELECT * FROM decks WHERE user_id = ? ORDER BY created_at DESC";
     db.all(sql, [req.user.id], (err, rows) => {
@@ -290,7 +332,7 @@ app.post('/api/decks', authenticateToken, (req, res) => {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ message: "Název balíčku je povinný." });
 
-    const sql = "INSERT INTO decks (user_id, name, description) VALUES (?, ?, ?)";
+    const sql = "INSERT INTO decks (user_id, name, description, is_public) VALUES (?, ?, ?, 0)";
     db.run(sql, [req.user.id, name, description || ''], function(err) {
         if (err) return res.status(500).json({ message: "Chyba při vytváření balíčku." });
         res.status(201).json({ id: this.lastID, user_id: req.user.id, name, description });
@@ -306,15 +348,24 @@ app.get('/api/decks/:id', authenticateToken, (req, res) => {
         const cardsSql = "SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY added_at ASC";
         db.all(cardsSql, [req.params.id], (err, cards) => {
             if (err) return res.status(500).json({ message: "Chyba při načítání karet." });
-            
             const processedCards = cards.map(c => ({
                 ...c,
                 card_data: JSON.parse(c.card_data),
                 template_data: JSON.parse(c.template_data)
             }));
-
             res.json({ ...deck, cards: processedCards });
         });
+    });
+});
+
+app.put('/api/decks/:id/toggle-public', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const { is_public } = req.body;
+    const sql = "UPDATE decks SET is_public = ? WHERE id = ? AND user_id = ?";
+    db.run(sql, [is_public ? 1 : 0, id, req.user.id], function(err) {
+        if (err) return res.status(500).json({ message: "Chyba při aktualizaci balíčku." });
+        if (this.changes === 0) return res.status(404).json({ message: "Balíček nenalezen nebo nemáte oprávnění." });
+        res.status(200).json({ message: "Viditelnost balíčku byla změněna." });
     });
 });
 
@@ -327,16 +378,33 @@ app.delete('/api/decks/:id', authenticateToken, (req, res) => {
     });
 });
 
+// --- Správa karet v balíčcích (DECK CARDS) ---
 
-// DECK CARDS
 app.post('/api/decks/:id/cards', authenticateToken, (req, res) => {
     const { card_data, template_data } = req.body;
     if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
-
     const sql = "INSERT INTO deck_cards (deck_id, card_data, template_data) VALUES (?, ?, ?)";
     db.run(sql, [req.params.id, JSON.stringify(card_data), JSON.stringify(template_data)], function(err) {
         if (err) return res.status(500).json({ message: "Chyba při ukládání karty do balíčku." });
         res.status(201).json({ id: this.lastID, deck_id: req.params.id });
+    });
+});
+
+app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
+    const { card_data, template_data } = req.body;
+    if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
+    db.get("SELECT user_id FROM decks WHERE id = ?", [req.params.deckId], (err, deck) => {
+        if (err) return res.status(500).json({ message: "Chyba databáze." });
+        if (!deck || deck.user_id !== req.user.id) {
+            return res.status(403).json({ message: "Nemáte oprávnění k tomuto balíčku." });
+        }
+        const sql = "UPDATE deck_cards SET card_data = ?, template_data = ? WHERE id = ? AND deck_id = ?";
+        const params = [ JSON.stringify(card_data), JSON.stringify(template_data), req.params.cardId, req.params.deckId ];
+        db.run(sql, params, function(err) {
+            if (err) return res.status(500).json({ message: "Chyba při aktualizaci karty." });
+            if (this.changes === 0) return res.status(404).json({ message: "Karta v balíčku nenalezena." });
+            res.status(200).json({ message: "Karta úspěšně aktualizována." });
+        });
     });
 });
 
@@ -349,66 +417,7 @@ app.delete('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => 
     });
 });
 
-app.put('/api/decks/:deckId/cards/:cardId', authenticateToken, (req, res) => {
-    const { card_data, template_data } = req.body;
-    if (!card_data || !template_data) return res.status(400).json({ message: "Chybí data karty nebo šablony." });
-
-    db.get("SELECT user_id FROM decks WHERE id = ?", [req.params.deckId], (err, deck) => {
-        if (err) return res.status(500).json({ message: "Chyba databáze při ověřování balíčku." });
-        if (!deck || deck.user_id !== req.user.id) {
-            return res.status(403).json({ message: "Nemáte oprávnění k tomuto balíčku." });
-        }
-
-        const sql = "UPDATE deck_cards SET card_data = ?, template_data = ? WHERE id = ? AND deck_id = ?";
-        const params = [
-            JSON.stringify(card_data),
-            JSON.stringify(template_data),
-            req.params.cardId,
-            req.params.deckId
-        ];
-
-        db.run(sql, params, function(err) {
-            if (err) return res.status(500).json({ message: "Chyba při aktualizaci karty." });
-            if (this.changes === 0) return res.status(404).json({ message: "Karta v balíčku nenalezena." });
-            res.status(200).json({ message: "Karta úspěšně aktualizována." });
-        });
-    });
-});
-app.delete('/api/assets/:id', authenticateToken, (req, res) => {
-    const assetId = req.params.id;
-
-    // Nejprve získej cestu k souboru pro smazání
-    db.get('SELECT filename FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], (err, row) => {
-        if (err) {
-            console.error("Error při získávání názvu souboru:", err);
-            return res.status(500).json({ message: "Chyba při mazání obrázku." });
-        }
-        if (!row) {
-            return res.status(404).json({ message: "Obrázek nenalezen nebo nemáte oprávnění." });
-        }
-
-        const filename = row.filename;
-        const filePath = path.join(__dirname, 'uploads', filename);
-
-        // Smaž záznam z databáze
-        db.run('DELETE FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id], function (err) {
-            if (err) {
-                console.error("Error při mazání z databáze:", err);
-                return res.status(500).json({ message: "Chyba při mazání obrázku z databáze." });
-            }
-
-            // Smaž soubor
-            fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) {
-                    console.error("Error při mazání souboru:", unlinkErr);
-                    // Logujeme chybu, ale nemažeme z databáze, aby nedošlo k nekonzistenci
-                }
-                res.status(200).json({ message: "Obrázek úspěšně smazán." });
-            });
-        });
-    });
-});
-
+// *** CATCH-ALL ROUTE (musí být na konci) ***
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

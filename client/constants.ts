@@ -233,7 +233,8 @@ export const MANA_SYMBOLS: { [key: string]: string } = {
   "L/B": "/svgs/mana/L_B.svg",
   "L/S": "/svgs/mana/L_S.svg",
   "L/U": "/svgs/mana/L_U.svg",
-  "L/D": "/svgs/mana/L_D.svg"
+  "L/D": "/svgs/mana/L_D.svg",
+  "CH": "/webp/icons/chapter.webp"
 };
 
 export const SET_SYMBOLS: { [key: string]: { name: string; url: string } } = {

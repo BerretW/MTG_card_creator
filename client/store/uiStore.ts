@@ -4,6 +4,9 @@ interface UIState {
   isTemplateEditorOpen: boolean;
   isAddToDeckModalOpen: boolean;
   isDeckManagerOpen: boolean;
+    isPublicDeckViewerOpen: boolean;
+  openPublicDeckViewer: () => void;
+  closePublicDeckViewer: () => void;
   openTemplateEditor: () => void;
   closeTemplateEditor: () => void;
   openAddToDeckModal: () => void;
@@ -16,6 +19,9 @@ export const useUiStore = create<UIState>((set) => ({
   isTemplateEditorOpen: false,
   isAddToDeckModalOpen: false,
   isDeckManagerOpen: false,
+    isPublicDeckViewerOpen: false,
+  openPublicDeckViewer: () => set({ isPublicDeckViewerOpen: true }),
+  closePublicDeckViewer: () => set({ isPublicDeckViewerOpen: false }),
   openTemplateEditor: () => set({ isTemplateEditorOpen: true }),
   closeTemplateEditor: () => set({ isTemplateEditorOpen: false }),
   openAddToDeckModal: () => set({ isAddToDeckModalOpen: true }),

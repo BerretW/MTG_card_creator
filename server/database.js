@@ -52,6 +52,7 @@ const db = new sqlite3.Database(DB_SOURCE, (err) => {
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             description TEXT,
+            is_public INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )`);

@@ -13,6 +13,7 @@ import Auth from './components/Auth';
 import AddToDeckModal from './components/AddToDeckModal';
 import DeckManager from './components/DeckManager';
 import SymbolPalette from './components/SymbolPalette';
+import PublicDeckViewer from './components/PublicDeckViewer';
 
 const App: React.FC = () => {
     const { token, userId, login, logout } = useAuthStore();
@@ -25,7 +26,8 @@ const App: React.FC = () => {
     const { 
       isTemplateEditorOpen, isAddToDeckModalOpen, isDeckManagerOpen,
       openTemplateEditor, closeTemplateEditor, openAddToDeckModal,
-      closeAddToDeckModal, openDeckManager, closeDeckManager 
+      closeAddToDeckModal, openDeckManager, closeDeckManager,
+      isPublicDeckViewerOpen, openPublicDeckViewer, closePublicDeckViewer
     } = useUiStore();
 
     const [editorWidth, setEditorWidth] = useState(480);
@@ -121,6 +123,7 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans relative">
             <div className="absolute top-4 right-4 flex flex-wrap gap-2 md:gap-4 z-20">
+                <button onClick={openPublicDeckViewer} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Veřejné balíčky</button>
                 <button onClick={openDeckManager} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Moje balíčky</button>
                 <button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm md:text-base">Odhlásit</button>
             </div>
@@ -172,6 +175,7 @@ const App: React.FC = () => {
             {isTemplateEditorOpen && <TemplateEditor templates={templates} onSave={saveTemplates} onClose={closeTemplateEditor} currentUserId={userId} onDelete={deleteTemplate}/>}
             {isAddToDeckModalOpen && <AddToDeckModal cardData={cardData} template={selectedTemplate} onClose={closeAddToDeckModal} onDecksUpdated={() => {}}/>}
             {isDeckManagerOpen && <DeckManager onClose={closeDeckManager} onEditCard={editCard}/>}
+            {isPublicDeckViewerOpen && <PublicDeckViewer onClose={closePublicDeckViewer} />}
         </div>
     );
 };

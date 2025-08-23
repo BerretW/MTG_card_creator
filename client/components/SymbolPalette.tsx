@@ -11,6 +11,7 @@ const AVAILABLE_SYMBOLS: { key: string; label: string; preview: string }[] = [
     { key: "T", label: "Tap", preview: MANA_SYMBOLS["T"] },
     { key: "UT", label: "Untap", preview: MANA_SYMBOLS["UT"] },
     { key: "H", label: "Half", preview: MANA_SYMBOLS["H"] },
+    { key: "X", label: "Half", preview: MANA_SYMBOLS["X"] },
     { key: "W/P", label: "Phyrexian White", preview: MANA_SYMBOLS["W/P"] },
     { key: "U/P", label: "Phyrexian Blue", preview: MANA_SYMBOLS["U/P"] },
     { key: "B/P", label: "Phyrexian Black", preview: MANA_SYMBOLS["B/P"] },
@@ -29,7 +30,9 @@ const AVAILABLE_SYMBOLS: { key: string; label: string; preview: string }[] = [
     { key: "L/B", label: "Lands", preview: MANA_SYMBOLS["L/B"] },
     { key: "L/S", label: "Lands", preview: MANA_SYMBOLS["L/S"] },
     { key: "L/U", label: "Lands", preview: MANA_SYMBOLS["L/U"] },
-    { key: "L/D", label: "Lands", preview: MANA_SYMBOLS["L/D"] }
+    { key: "L/D", label: "Lands", preview: MANA_SYMBOLS["L/D"] },
+    { key: "CH", label: "Chapter", preview: MANA_SYMBOLS["CH"] },
+
 ];
 
 interface SymbolPaletteProps {

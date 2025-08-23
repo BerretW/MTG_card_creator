@@ -5,7 +5,7 @@ import { toPng } from 'html-to-image';
 import { assetService } from '../services/assetService';
 import { Deck, SavedCard, CardData, Template } from '../types';
 import CardPreview from './CardPreview';
-import { useUiStore } from '../store/uiStore'; // <-- Přidáme import uiStore
+import { useUiStore } from '../store/uiStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -46,6 +46,7 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
     const [viewingCard, setViewingCard] = useState<SavedCard | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState('');
+    const closeDeckManager = useUiStore(state => state.closeDeckManager);
 
     const fetchDecks = useCallback(() => {
         setIsLoading(true);
@@ -95,14 +96,24 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
         }
     };
     
-    const closeDeckManager = useUiStore(state => state.closeDeckManager);
-
     const handleStartEdit = () => {
         if (viewingCard) {
             onEditCard(viewingCard);
-            // --- OPRAVA ZDE ---
-            // Po předání karty k editaci zavřeme modální okno.
             closeDeckManager();
+        }
+    };
+
+    const handleTogglePublic = async (deckId: number, currentStatus: boolean) => {
+        try {
+            await assetService.toggleDeckPublicStatus(deckId, !currentStatus);
+            setDecks(prevDecks => prevDecks.map(d => 
+                d.id === deckId ? { ...d, is_public: !currentStatus ? 1 : 0 } : d
+            ));
+            if (selectedDeck?.id === deckId) {
+                setSelectedDeck(prev => prev ? { ...prev, is_public: !currentStatus ? 1 : 0 } : null);
+            }
+        } catch (error) {
+            alert("Chyba při změně viditelnosti balíčku.");
         }
     };
 
@@ -145,25 +156,22 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                     frameImageUrl: getProxiedUrl(savedCard.template_data.frameImageUrl),
                 };
 
-                // Vytvoříme nový, čistý root pro každou kartu
                 const root = ReactDOM.createRoot(printContainer);
                 await new Promise<void>(resolve => {
                     root.render(
                         <CardPreview cardData={proxiedCardData} template={proxiedTemplateData} />
                     );
-                    // Pevná pauza je zde spolehlivější než requestAnimationFrame
                     setTimeout(resolve, 300);
                 });
                 
                 const cardDataUrl = await toPng(printContainer.firstElementChild as HTMLElement, {
                     pixelRatio: 3,
                     quality: 1.0,
-                    cacheBust: true, // Důležité pro načtení proxovaných obrázků
+                    cacheBust: true,
                 });
                 
-                // Uklidíme po sobě PŘED další iterací
                 root.unmount();
-                printContainer.innerHTML = ''; // Pro jistotu
+                printContainer.innerHTML = '';
 
                 const cardIndexOnPage = i % CARDS_PER_PAGE;
                 if (i > 0 && cardIndexOnPage === 0) {
@@ -208,7 +216,20 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                                 <div key={deck.id} onClick={() => handleSelectDeck(deck.id)} className={`p-3 rounded-md cursor-pointer transition-colors ${selectedDeck?.id === deck.id ? 'bg-yellow-400/20' : 'hover:bg-gray-700'}`}>
                                     <div className="flex justify-between items-center">
                                         <p className="font-bold truncate">{deck.name}</p>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteDeck(deck.id); }} className="text-red-500 hover:text-red-400 text-xs ml-2 flex-shrink-0">SMAZAT</button>
+                                        <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                                            <label htmlFor={`public-${deck.id}`} className="text-xs text-gray-400 flex items-center cursor-pointer" title="Zveřejnit tento balíček pro ostatní">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`public-${deck.id}`}
+                                                    checked={!!deck.is_public}
+                                                    onChange={() => handleTogglePublic(deck.id, !!deck.is_public)}
+                                                    onClick={e => e.stopPropagation()}
+                                                    className="h-3 w-3 mr-1 accent-yellow-400"
+                                                />
+                                                Veřejný
+                                            </label>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteDeck(deck.id); }} className="text-red-500 hover:text-red-400 text-xs">SMAZAT</button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -274,24 +295,24 @@ const DeckManager: React.FC<DeckManagerProps> = ({ onClose, onEditCard }) => {
                     onClick={(e) => e.stopPropagation()}
                 >
                     {viewingCard && (
-                    <div className="relative">
-                        <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
-                        <div className="mt-4 flex justify-center gap-4">
-                            <button 
-                                onClick={handleStartEdit} // <-- Volá se opravená funkce
-                                className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
-                            >
-                                Upravit tuto kartu
-                            </button>
-                            <button 
-                                onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
-                                className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
-                            >
-                                Odebrat z balíčku
-                            </button>
+                        <div className="relative">
+                            <CardPreview cardData={viewingCard.card_data} template={viewingCard.template_data} />
+                            <div className="mt-4 flex justify-center gap-4">
+                                <button 
+                                    onClick={handleStartEdit}
+                                    className="py-2 px-6 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-bold"
+                                >
+                                    Upravit tuto kartu
+                                </button>
+                                <button 
+                                    onClick={() => handleRemoveCard(viewingCard.id).then(() => setViewingCard(null))}
+                                    className="py-2 px-4 rounded-md bg-red-600 hover:bg-red-500 text-white"
+                                >
+                                    Odebrat z balíčku
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
                 </div>
             </div>
         </>
